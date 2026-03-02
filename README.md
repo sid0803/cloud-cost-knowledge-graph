@@ -44,32 +44,8 @@ The system follows a layered, production-style architecture separating ingestion
 
 ## 🔷 High-Level Architecture
 
-```mermaid
-flowchart TD
+<img width="1025" height="2011" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/f983f0d2-6be2-4a4a-bd0f-3b44542dd11e" />
 
-A[SQLite Billing Data] --> B[Ontology & Loader Layer]
-B --> C[Neo4j Knowledge Graph]
-
-C --> D[Vector Embedding Layer<br>SentenceTransformer]
-D --> E[Vector Index]
-
-C --> F[Deterministic Graph Query Engine]
-
-E --> G[Hybrid Retrieval Layer]
-F --> G
-
-G --> H[Reasoning Layer]
-
-H --> I[Deterministic Answer Assembly]
-H --> J[LLM Fallback (Ollama)]
-
-I --> K[Confidence Scoring]
-J --> K
-
-K --> L[Streamlit UI]
-```
-
----
 
 ## 🔷 Layer Responsibilities
 
