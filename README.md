@@ -435,10 +435,3 @@ This system demonstrates:
 It is designed for accurate, transparent, and extensible cloud cost intelligence.
 
 ---
-
-If you'd like, next I can help you:
-
-* Design a clean PNG architecture diagram for even stronger presentation
-* Or simulate recruiter interview questions based on this system
-
-You're now presenting this at a very strong level.
