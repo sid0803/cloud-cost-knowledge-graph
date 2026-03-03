@@ -1,0 +1,78 @@
+# Cloud Cost Knowledge Graph - Full Upgrade Task
+
+## Phase 1: Core Gaps & Critical Fixes
+- [ ] **A1** Replace [requirements.txt](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/requirements.txt) with correct, installable package versions
+- [ ] **A2** Create `setup_demo_db.py` (missing from codebase, referenced in README)
+- [ ] **A3** Enhance [graph/schema.py](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/graph/schema.py) with missing constraints (billingAccountId uniqueness, full-text indexes, date indexes)
+- [ ] **A4** Enhance [graph/focus_schema_loader.py](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/graph/focus_schema_loader.py):
+  - Full FOCUS 1.0 column metadata (ALL 12+ columns with rich descriptions)
+  - VendorSpecificAttributes subclass hierarchy (AWS, Azure)
+  - DerivationRule nodes for ContractedCost, ListCost
+  - CostAllocation ontology class node
+  - Cardinality/Validation rule properties on FOCUSColumn nodes
+- [ ] **A5** Enhance [graph/metadata_loader.py](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/graph/metadata_loader.py):
+  - Load Location nodes with RegionId + RegionName
+  - Enrich Service nodes with ServiceCategory
+  - Enrich Account nodes with BillingAccountName, SubAccountId, SubAccountName
+- [ ] **A6** Enhance [graph/cost_record_loader.py](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/graph/cost_record_loader.py):
+  - Add ListCost, Currency loading
+  - Add ResourceName, ResourceType from data
+  - Fix INCURRED_BY relationship (create Resource node inline if not exists)
+  - Add BELONGS_TO_SUBACCOUNT relationship
+
+## Phase 2: RAG Pipeline Enhancement (Part D)
+- [ ] **B1** Upgrade [rag/llm_pipeline.py](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/rag/llm_pipeline.py):
+  - Add Google Gemini LLM support (via google-generativeai)
+  - Add OpenAI fallback option
+  - Improve ALL 11 assignment test queries with rich, accurate responses
+  - Fix "Azure equivalent of AWS S3" query handler
+  - Fix "ContractedCost vs ContractedUnitPrice × PricingQuantity" query
+  - Fix "which cost type to analyze cloud spend" query
+  - Add "why total increases with commitment purchases" handler
+- [ ] **B2** Upgrade [rag/context_builder.py](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/rag/context_builder.py):
+  - Better intent detection (more patterns)
+  - Richer graph traversal (multi-hop: CostRecord → Service → Category → PricingModel)
+  - Cross-index search (FOCUSColumn + Service + Charge)
+  - Provenance path assembly with deduplication
+
+## Phase 3: FastAPI REST API (Part F - Bonus)
+- [ ] **C1** Create `api.py` with FastAPI endpoints:
+  - `POST /query` → `{"answer","concepts","paths","confidence"}`
+  - `GET /health` → `{"status":"ok"}`
+  - `GET /concept/{name}` → concept details + related nodes + similarity scores
+  - `GET /stats` → total nodes, total relationships, index status
+
+## Phase 4: Streamlit UI Enhancement (Part E - Testing)
+- [ ] **D1** Upgrade [app.py](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/app.py) to premium Streamlit UI:
+  - Beautiful dark-mode themed interface
+  - Sidebar with system stats and quick query examples
+  - Graph visualization using pyvis/networkx inline HTML
+  - Tab layout: Answer | Graph | Provenance | Raw Context
+  - Pre-loaded test queries from assignment Part E
+  - Display retrieval method badge, confidence progress bar
+  - Query history / evaluation log viewer
+  - Allocation explanation panel
+
+## Phase 5: README Overhaul
+- [ ] **E1** Rewrite [README.md](file:///c:/Users/sid08/OneDrive/Desktop/cloud-cost-knowledge-graph/README.md) with full submission requirements:
+  - System architecture diagram
+  - Ontology design rationale
+  - Graph schema design
+  - RAG pipeline architecture
+  - Vector store design
+  - Relationship types and mapping methodology
+  - Complete setup instructions
+
+## Verification
+- [ ] Run `python db/init_sqlite.py`
+- [ ] Run `python setup_demo_db.py`
+- [ ] Run `python -m graph.schema`
+- [ ] Run `python -m graph.focus_schema_loader`
+- [ ] Run `python -m graph.metadata_loader`
+- [ ] Run `python -m graph.cost_record_loader`
+- [ ] Run `python -m graph.cost_allocation_loader`
+- [ ] Run `python -m graph.service_mapping`
+- [ ] Run `python -m graph.embed_services`
+- [ ] Run `python -m graph.embed_all_nodes`
+- [ ] Run `streamlit run app.py`
+- [ ] Test all 11 assignment queries in UI

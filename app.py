@@ -1,119 +1,521 @@
-# app.py
+# app.py — Premium Streamlit UI for Cloud Cost Knowledge Graph
 
 import streamlit as st
-from rag.llm_pipeline import generate_answer
-from graph.neo4j_connection import driver
+import json
+import os
+from datetime import datetime
 
-
-# =================================================
-# Page Config
-# =================================================
+# ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Cloud Cost Knowledge Graph",
-    layout="wide"
+    page_icon="☁️",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-st.title("☁️ Cloud Cost Knowledge Graph + RAG Engine")
-st.markdown("Graph-Augmented Retrieval + Vector Search + LLM Explanation")
+# ── Custom CSS ────────────────────────────────────────────────────────────────
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
-st.divider()
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
-# =================================================
-# Session State
-# =================================================
-if "result" not in st.session_state:
-    st.session_state.result = None
+    .main { background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%); }
 
-# =================================================
-# User Input
-# =================================================
-query = st.text_input(
-    "🔎 Ask a cloud cost question (e.g., compute costs, FOCUS columns, commitment usage)"
-)
+    .hero-header {
+        background: linear-gradient(90deg, #6a11cb 0%, #2575fc 100%);
+        border-radius: 16px;
+        padding: 28px 36px;
+        margin-bottom: 24px;
+        box-shadow: 0 8px 32px rgba(106,17,203,0.4);
+    }
+    .hero-header h1 {
+        color: white; font-size: 2.2rem; font-weight: 700; margin: 0;
+        text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .hero-header p {
+        color: rgba(255,255,255,0.85); font-size: 1rem; margin: 6px 0 0 0;
+    }
 
-if st.button("Analyze"):
+    .metric-card {
+        background: linear-gradient(135deg, #1e2140 0%, #252a4a 100%);
+        border: 1px solid rgba(106,17,203,0.3);
+        border-radius: 12px;
+        padding: 16px 20px;
+        text-align: center;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    }
+    .metric-card .metric-value {
+        font-size: 2rem; font-weight: 700;
+        background: linear-gradient(90deg, #6a11cb, #2575fc);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .metric-card .metric-label {
+        color: rgba(255,255,255,0.6); font-size: 0.8rem; margin-top: 4px;
+    }
 
-    if not query:
-        st.warning("Please enter a query.")
+    .answer-box {
+        background: linear-gradient(135deg, #1a2035 0%, #1e2a4a 100%);
+        border: 1px solid rgba(37,117,252,0.4);
+        border-left: 4px solid #2575fc;
+        border-radius: 12px;
+        padding: 20px 24px;
+        margin: 12px 0;
+        box-shadow: 0 4px 20px rgba(37,117,252,0.15);
+    }
+
+    .prov-path {
+        background: rgba(106,17,203,0.15);
+        border: 1px solid rgba(106,17,203,0.3);
+        border-radius: 8px;
+        padding: 8px 14px;
+        margin: 4px 0;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        color: #a78bfa;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 6px;
+    }
+    .badge-graph  { background: rgba(16,185,129,0.2); color: #10b981; border: 1px solid #10b981; }
+    .badge-hybrid { background: rgba(245,158,11,0.2); color: #f59e0b; border: 1px solid #f59e0b; }
+    .badge-vector { background: rgba(99,102,241,0.2); color: #6366f1; border: 1px solid #6366f1; }
+
+    .query-btn {
+        background: linear-gradient(90deg, rgba(106,17,203,0.2), rgba(37,117,252,0.2));
+        border: 1px solid rgba(106,17,203,0.4);
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin: 3px 0;
+        width: 100%;
+        text-align: left;
+        color: #c4b5fd;
+        cursor: pointer;
+        font-size: 0.8rem;
+    }
+
+    .stButton > button {
+        background: linear-gradient(90deg, #6a11cb, #2575fc) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        padding: 10px 28px !important;
+        box-shadow: 0 4px 15px rgba(106,17,203,0.4) !important;
+        transition: all 0.3s ease !important;
+    }
+    .stButton > button:hover {
+        box-shadow: 0 6px 25px rgba(106,17,203,0.6) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    .stTextInput > div > div > input {
+        background: rgba(30,33,64,0.9) !important;
+        border: 1px solid rgba(106,17,203,0.5) !important;
+        border-radius: 10px !important;
+        color: white !important;
+        font-size: 1rem !important;
+        padding: 12px 16px !important;
+    }
+
+    .stProgress > div > div > div > div {
+        background: linear-gradient(90deg, #6a11cb, #2575fc) !important;
+    }
+
+    div[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0d0d1a 0%, #1a1a2e 100%) !important;
+        border-right: 1px solid rgba(106,17,203,0.3) !important;
+    }
+
+    .sidebar-section {
+        background: rgba(30,33,64,0.6);
+        border: 1px solid rgba(106,17,203,0.2);
+        border-radius: 10px;
+        padding: 12px 14px;
+        margin: 8px 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ── Imports (after page config) ──────────────────────────────────────────────
+try:
+    from rag.llm_pipeline import generate_answer
+    from graph.neo4j_connection import driver
+    BACKEND_OK = True
+except Exception as e:
+    BACKEND_OK = False
+    BACKEND_ERROR = str(e)
+
+# ── Session state ─────────────────────────────────────────────────────────────
+if "result"       not in st.session_state: st.session_state.result       = None
+if "query_input"  not in st.session_state: st.session_state.query_input  = ""
+if "history"      not in st.session_state: st.session_state.history      = []
+
+# ── Hero Header ───────────────────────────────────────────────────────────────
+st.markdown("""
+<div class="hero-header">
+    <h1>☁️ Cloud Cost Knowledge Graph</h1>
+    <p>FOCUS 1.0 · Neo4j Graph Database · Hybrid RAG (Vector + Graph) · Gemini LLM · Sentence Transformers</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SIDEBAR
+# ─────────────────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("## 🧠 Knowledge Graph")
+
+    # Graph stats
+    if BACKEND_OK:
+        try:
+            with driver.session() as session:
+                node_count = session.run("MATCH (n) RETURN count(n) AS c").single()["c"]
+                rel_count  = session.run("MATCH ()-[r]->() RETURN count(r) AS c").single()["c"]
+                svc_count  = session.run("MATCH (s:Service) RETURN count(s) AS c").single()["c"]
+                focus_count= session.run("MATCH (f:FOCUSColumn) RETURN count(f) AS c").single()["c"]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"""<div class="metric-card"><div class="metric-value">{node_count:,}</div><div class="metric-label">Total Nodes</div></div>""", unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"""<div class="metric-card"><div class="metric-value">{rel_count:,}</div><div class="metric-label">Relationships</div></div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            col3, col4 = st.columns(2)
+            with col3:
+                st.markdown(f"""<div class="metric-card"><div class="metric-value">{svc_count}</div><div class="metric-label">Services</div></div>""", unsafe_allow_html=True)
+            with col4:
+                st.markdown(f"""<div class="metric-card"><div class="metric-value">{focus_count}</div><div class="metric-label">FOCUS Columns</div></div>""", unsafe_allow_html=True)
+        except Exception:
+            st.warning("⚠️ Neo4j not connected")
+
+    st.divider()
+
+    # Preset test queries
+    st.markdown("### 🎯 Assignment Test Queries")
+    st.markdown("*Click to load a query:*")
+
+    PRESET_QUERIES = [
+        ("1️⃣", "Which are the core FOCUS columns and how do they differ from vendor specific columns?"),
+        ("2️⃣", "Find all AWS compute services"),
+        ("3️⃣", "What is the Azure equivalent of AWS S3?"),
+        ("4️⃣", "Compare storage costs between AWS and Azure"),
+        ("5️⃣", "Find the top 5 most expensive resources tagged as Production in Azure"),
+        ("6️⃣", "When calculating commitment utilization, which charge categories must be excluded to avoid double counting?"),
+        ("7️⃣", "Why does my total increase when I include commitment purchases and usage together?"),
+        ("8️⃣", "Which cost type should be used to analyze cloud spend?"),
+        ("9️⃣", "Can ContractedCost differ from ContractedUnitPrice × PricingQuantity for a normal Usage charge?"),
+        ("🔟", "What is EffectiveCost and how is it derived?"),
+        ("🔟", "Show total AWS cost vs Azure cost breakdown by service category"),
+    ]
+
+    for emoji, q in PRESET_QUERIES:
+        if st.button(f"{emoji} {q[:55]}...", key=f"preset_{q[:20]}", use_container_width=True):
+            st.session_state.query_input = q
+            st.rerun()
+
+    st.divider()
+    st.markdown("### ⚙️ System Info")
+    st.markdown("""
+    <div class="sidebar-section" style="font-size:0.8rem; color: rgba(255,255,255,0.7);">
+    <b>Stack:</b><br>
+    • 🗄 Neo4j Knowledge Graph<br>
+    • 🔍 all-MiniLM-L6-v2 Embeddings<br>
+    • 🤖 Gemini 1.5 Flash / OpenAI<br>
+    • 📊 FOCUS 1.0 Ontology<br>
+    • ⚡ Hybrid RAG Pipeline
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.button("🗑️ Clear History", use_container_width=True):
+        st.session_state.history = []
+        st.session_state.result  = None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MAIN CONTENT
+# ─────────────────────────────────────────────────────────────────────────────
+if not BACKEND_OK:
+    st.error(f"❌ Backend connection failed: {BACKEND_ERROR}")
+    st.info("Make sure Neo4j is running and `.env` has NEO4J_PASSWORD set.")
+    st.stop()
+
+# ── Query Input ───────────────────────────────────────────────────────────────
+col_input, col_btn = st.columns([5, 1])
+with col_input:
+    query = st.text_input(
+        "🔎 Ask a cloud cost question",
+        value=st.session_state.query_input,
+        placeholder="e.g. Which FOCUS columns differ from vendor columns? | Compare AWS vs Azure storage costs",
+        key="query_field",
+        label_visibility="collapsed",
+    )
+
+with col_btn:
+    analyze_clicked = st.button("⚡ Analyze", use_container_width=True)
+
+if analyze_clicked:
+    if not query.strip():
+        st.warning("Please enter a question.")
     else:
-        with st.spinner("Running Graph + Vector + LLM pipeline..."):
-            st.session_state.result = generate_answer(query)
+        with st.spinner("🔄 Running Hybrid Graph + Vector + LLM pipeline..."):
+            result = generate_answer(query)
+            st.session_state.result = result
+            st.session_state.history.append({
+                "query": query,
+                "result": result,
+                "time": datetime.now().strftime("%H:%M:%S"),
+            })
+            st.session_state.query_input = ""
 
-# =================================================
-# Display Result Section
-# =================================================
+# ── Results ───────────────────────────────────────────────────────────────────
 if st.session_state.result:
-
     result = st.session_state.result
 
-    # ----------------------------
-    # AI Answer
-    # ----------------------------
-    st.subheader("🧠 AI Answer")
-    st.write(result.get("answer", "No answer generated."))
+    # ── Metadata row ─────────────────────────────────────────────────────────
+    method     = result.get("retrieval_method", "hybrid")
+    confidence = result.get("confidence", 0.0)
+    badge_cls  = f"badge-{method}" if method in ("graph", "hybrid", "vector") else "badge-hybrid"
 
-    st.divider()
+    col_m1, col_m2, col_m3 = st.columns([2, 2, 6])
+    with col_m1:
+        st.markdown(f'<span class="badge {badge_cls}">🔍 {method.upper()}</span>', unsafe_allow_html=True)
+    with col_m2:
+        conf_pct = int(confidence * 100)
+        color = "#10b981" if conf_pct >= 70 else "#f59e0b" if conf_pct >= 50 else "#ef4444"
+        st.markdown(f'<span style="color:{color}; font-weight:600;">📈 Confidence: {conf_pct}%</span>', unsafe_allow_html=True)
+    with col_m3:
+        st.progress(confidence)
 
-    # ----------------------------
-    # Provenance
-    # ----------------------------
-    st.subheader("🔎 Provenance Paths")
+    st.markdown("<br>", unsafe_allow_html=True)
 
-    provenance = result.get("provenance", [])
+    # ── Tabs ─────────────────────────────────────────────────────────────────
+    tab1, tab2, tab3, tab4 = st.tabs(["🧠 Answer", "🔎 Provenance", "📊 Graph Viz", "📋 Query History"])
 
-    if provenance:
-        for path in provenance:
-            if isinstance(path, dict):
-                st.write(
-                    f"• {path.get('from')} "
-                    f"→ {path.get('relationship')} "
-                    f"→ {path.get('to')}"
-                )
-            else:
-                st.write("•", path)
-    else:
-        st.info("No provenance paths available.")
+    # TAB 1 — ANSWER
+    with tab1:
+        answer = result.get("answer", "No answer generated.")
+        st.markdown(f'<div class="answer-box">{answer}</div>', unsafe_allow_html=True)
 
-    st.divider()
+        alloc = result.get("allocation_explanation")
+        if alloc:
+            st.divider()
+            st.markdown("### 🧾 Allocation Explanation")
+            st.info(alloc)
 
-    # ----------------------------
-    # Retrieval Method
-    # ----------------------------
-    st.subheader("🧩 Retrieval Method")
-    st.write(result.get("retrieval_method", "Unknown"))
+    # TAB 2 — PROVENANCE
+    with tab2:
+        provenance = result.get("provenance", [])
+        if provenance:
+            st.markdown("#### Graph Traversal Paths")
+            for i, path in enumerate(provenance, 1):
+                if isinstance(path, dict):
+                    frm   = path.get("from", "")
+                    rel   = path.get("relationship", "→")
+                    to    = path.get("to", "")
+                    st.markdown(
+                        f'<div class="prov-path">#{i} &nbsp; {frm} &nbsp;─[{rel}]→&nbsp; {to}</div>',
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(f'<div class="prov-path">#{i} &nbsp; {path}</div>', unsafe_allow_html=True)
+        else:
+            st.info("No provenance paths. This answer was generated from graph-level metadata.")
 
-    # ----------------------------
-    # Confidence Score
-    # ----------------------------
-    st.subheader("📈 Confidence Score")
-    confidence = result.get("confidence", 0)
-    st.progress(confidence)
-    st.write(f"{int(confidence * 100)}%")
+    # TAB 3 — GRAPH VISUALIZATION
+    with tab3:
+        st.markdown("#### Live Graph Sample (Cost Records → Services → Locations)")
+        try:
+            from pyvis.network import Network
+            import tempfile
 
-    # ----------------------------
-    # Allocation Explanation
-    # ----------------------------
-    allocation_explanation = result.get("allocation_explanation")
+            net = Network(height="480px", bgcolor="#0f0f1a", font_color="white")
+            net.set_options("""
+            {
+              "nodes": {"shape": "dot","size": 18,"font": {"size": 13, "color": "white"}},
+              "edges": {"arrows": {"to": {"enabled": true, "scaleFactor": 0.7}},
+                        "color": {"color": "#6a11cb"},
+                        "font": {"size": 10, "color": "#a78bfa"}},
+              "physics": {"stabilization": {"iterations": 150}},
+              "interaction": {"hover": true}
+            }
+            """)
 
-    if allocation_explanation:
-        st.divider()
-        st.subheader("🧾 Allocation Explanation")
-        st.write(allocation_explanation)
+            COLORS = {
+                "CostRecord": "#6a11cb",
+                "Service": "#2575fc",
+                "Resource": "#10b981",
+                "Account": "#f59e0b",
+                "Location": "#ef4444",
+                "Charge": "#8b5cf6",
+                "Tag": "#06b6d4",
+            }
 
-# =================================================
-# Graph Statistics (Always Visible)
-# =================================================
-st.divider()
-st.subheader("📊 Graph Statistics")
+            with driver.session() as session:
+                records = session.run("""
+                    MATCH (c:CostRecord)-[:USES_SERVICE]->(s:Service)
+                    OPTIONAL MATCH (c)-[:INCURRED_BY]->(r:Resource)
+                    OPTIONAL MATCH (r)-[:DEPLOYED_IN]->(l:Location)
+                    OPTIONAL MATCH (c)-[:HAS_CHARGE]->(ch:Charge)
+                    RETURN c.id AS cid, c.cloudProvider AS provider,
+                           c.effectiveCost AS cost,
+                           s.name AS service, s.serviceCategory AS cat,
+                           r.id AS resource,
+                           l.regionName AS region,
+                           ch.category AS charge
+                    LIMIT 30
+                """).data()
 
-with driver.session() as session:
-    node_count = session.run(
-        "MATCH (n) RETURN count(n) AS count"
-    ).single()["count"]
+            added_nodes = set()
 
-    rel_count = session.run(
-        "MATCH ()-[r]->() RETURN count(r) AS count"
-    ).single()["count"]
+            for row in records:
+                cid     = (row.get("cid") or "")[:12]
+                service = row.get("service")
+                resource= row.get("resource")
+                region  = row.get("region")
+                charge  = row.get("charge")
+                cost    = row.get("cost") or 0
+                provider= row.get("provider") or "?"
+                cat     = row.get("cat") or "Other"
 
-st.write(f"Total Nodes: {node_count}")
-st.write(f"Total Relationships: {rel_count}")
+                if cid not in added_nodes:
+                    net.add_node(cid, label=f"💰 {cid}\n${cost:.1f}",
+                                 color=COLORS["CostRecord"], title=f"CostRecord | {provider} | ${cost:.2f}")
+                    added_nodes.add(cid)
+
+                if service and service not in added_nodes:
+                    net.add_node(service, label=f"⬡ {service[:20]}",
+                                 color=COLORS["Service"], title=f"Service: {service}\nCategory: {cat}")
+                    added_nodes.add(service)
+
+                if service:
+                    net.add_edge(cid, service, label="USES_SERVICE")
+
+                if resource:
+                    rid = str(resource)[:12]
+                    if rid not in added_nodes:
+                        net.add_node(rid, label=f"📦 {rid}",
+                                     color=COLORS["Resource"], title=f"Resource: {resource}")
+                        added_nodes.add(rid)
+                    net.add_edge(cid, rid, label="INCURRED_BY")
+
+                if region and region not in added_nodes:
+                    net.add_node(region, label=f"📍 {region}",
+                                 color=COLORS["Location"], title=f"Region: {region}")
+                    added_nodes.add(region)
+
+                if resource and region:
+                    rid = str(resource)[:12]
+                    net.add_edge(rid, region, label="DEPLOYED_IN")
+
+                if charge and charge not in added_nodes:
+                    net.add_node(charge, label=f"⚡ {charge}",
+                                 color=COLORS["Charge"], title=f"ChargeCategory: {charge}")
+                    added_nodes.add(charge)
+
+                if charge:
+                    net.add_edge(cid, charge, label="HAS_CHARGE")
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".html", mode="w") as f:
+                net.write_html(f.name)
+                html_path = f.name
+
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+
+            st.components.v1.html(html_content, height=500, scrolling=False)
+
+            # Legend
+            st.markdown("**Legend:**")
+            leg_cols = st.columns(7)
+            icons = ["💰 CostRecord", "⬡ Service", "📦 Resource",
+                     "🏦 Account", "📍 Location", "⚡ Charge", "🏷️ Tag"]
+            cols_list = ["#6a11cb", "#2575fc", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4"]
+            for col, icon, color in zip(leg_cols, icons, cols_list):
+                with col:
+                    st.markdown(f'<span style="color:{color}; font-size:0.75rem;">● {icon}</span>', unsafe_allow_html=True)
+
+        except ImportError:
+            st.info("📦 Install `pyvis` to enable graph visualization: `pip install pyvis`")
+        except Exception as e:
+            st.warning(f"Graph visualization unavailable: {e}")
+
+    # TAB 4 — HISTORY
+    with tab4:
+        history = st.session_state.history
+        if not history:
+            st.info("No queries yet. Run a few queries to see the history here.")
+        else:
+            st.markdown(f"**{len(history)} queries in this session:**")
+            for i, h in enumerate(reversed(history)):
+                with st.expander(f"[{h['time']}] {h['query'][:70]}...", expanded=(i == 0)):
+                    hr = h["result"]
+                    method_h = hr.get("retrieval_method", "hybrid")
+                    conf_h   = int(hr.get("confidence", 0) * 100)
+                    st.markdown(f"**Method:** `{method_h}` | **Confidence:** `{conf_h}%`")
+                    st.markdown(hr.get("answer", ""))
+
+            # Load evaluation log
+            if os.path.exists("evaluation_log.json"):
+                st.divider()
+                st.markdown("#### 📋 Evaluation Log (from disk)")
+                try:
+                    with open("evaluation_log.json") as f:
+                        lines = f.readlines()
+                    log_data = [json.loads(l) for l in lines[-10:] if l.strip()]
+                    st.dataframe(log_data, use_container_width=True)
+                except Exception:
+                    pass
+
+# ── Empty state ───────────────────────────────────────────────────────────────
+if not st.session_state.result:
+    st.markdown("""
+    <div style="text-align:center; padding: 60px 20px; color: rgba(255,255,255,0.4);">
+        <div style="font-size: 4rem; margin-bottom: 16px;">🔭</div>
+        <div style="font-size: 1.2rem; font-weight: 600; color: rgba(255,255,255,0.6);">
+            Ask a question to explore the knowledge graph
+        </div>
+        <div style="font-size: 0.9rem; margin-top: 8px;">
+            Try: <i>Compare storage costs between AWS and Azure</i>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Show feature cards
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("""
+        <div class="metric-card" style="text-align:left; padding:20px;">
+            <div style="font-size:1.8rem;">🗺️</div>
+            <div style="color:white; font-weight:600; margin:8px 0 4px;">FOCUS 1.0 Ontology</div>
+            <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;">
+            30+ standardized columns modeled as graph nodes with derivation rules, validation rules, and vendor mappings.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c2:
+        st.markdown("""
+        <div class="metric-card" style="text-align:left; padding:20px;">
+            <div style="font-size:1.8rem;">⚡</div>
+            <div style="color:white; font-weight:600; margin:8px 0 4px;">Hybrid Retrieval</div>
+            <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;">
+            Vector similarity search on sentence-transformer embeddings + multi-hop Cypher graph traversal for provenance.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with c3:
+        st.markdown("""
+        <div class="metric-card" style="text-align:left; padding:20px;">
+            <div style="font-size:1.8rem;">🤖</div>
+            <div style="color:white; font-weight:600; margin:8px 0 4px;">LLM Chain</div>
+            <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;">
+            Gemini 1.5 Flash → OpenAI GPT-4o-mini → Ollama fallback chain. All financial math is deterministic graph queries.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)

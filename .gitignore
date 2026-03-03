@@ -40,3 +40,18 @@ data/
 # -------------------------
 .DS_Store
 Thumbs.db
+
+# -------------------------
+# Temp / Debug Files
+# -------------------------
+delete.me
+test_llm.py
+test_llm_file.py
+list_models.py
+available_models.txt
+error_log.txt
+test_gem_out.txt
+test_result.log
+test_result2.log
+test_outputs.txt
+test_gemini_outputs.txt

@@ -1,28 +1,17 @@
 # graph/cost_record_loader.py
+# Loads CostRecord nodes with full FOCUS fields and all graph relationships
 
 import sqlite3
 from graph.neo4j_connection import driver
 import uuid
 
 
-# =================================================
-# Helper: Parse Tags
-# =================================================
 def parse_tags(tag_string):
-    """
-    Expected format examples:
-    key1=value1;key2=value2
-    key1:value1,key2:value2
-    """
     tag_dict = {}
-
     if not tag_string:
         return tag_dict
-
-    # Normalize separators
-    tag_string = tag_string.replace(";", ",")
+    tag_string = str(tag_string).replace(";", ",")
     pairs = tag_string.split(",")
-
     for pair in pairs:
         if "=" in pair:
             key, value = pair.split("=", 1)
@@ -30,246 +19,225 @@ def parse_tags(tag_string):
             key, value = pair.split(":", 1)
         else:
             continue
-
-        tag_dict[key.strip()] = value.strip()
-
+        tag_dict[key.strip().lower()] = value.strip()
     return tag_dict
 
 
-# =================================================
-# Load Records
-# =================================================
-def load_cost_records():
-
-    conn = sqlite3.connect("billing.db")
-    cursor = conn.cursor()
-
-    print("Loading AWS records...")
-    aws_rows = cursor.execute("""
-        SELECT 
-            ResourceId,
-            ServiceName,
-            BillingAccountId,
-            ChargeCategory,
-            ChargeFrequency,
-            ChargeDescription,
-            ChargeClass,
-            ChargePeriodStart,
-            ChargePeriodEnd,
-            BilledCost,
-            EffectiveCost,
-            ContractedCost,
-            ConsumedQuantity,
-            ConsumedUnit,
-            x_ServiceCode,
-            x_UsageType,
-            Tags
-        FROM aws_billing
-    """).fetchall()
-
-    print("Loading Azure records...")
-    azure_rows = cursor.execute("""
-        SELECT 
-            resourceid,
-            servicename,
-            billingaccountid,
-            chargecategory,
-            chargefrequency,
-            chargedescription,
-            chargeclass,
-            chargeperiodstart,
-            chargeperiodend,
-            billedcost,
-            effectivecost,
-            contractedcost,
-            consumedquantity,
-            consumedunit,
-            x_skumetercategory,
-            x_skudescription,
-            tags
-        FROM azure_billing
-    """).fetchall()
-
-    with driver.session() as session:
-        for row in aws_rows:
-            create_cost_record(session, row, "AWS")
-
-        for row in azure_rows:
-            create_cost_record(session, row, "Azure")
-
-    conn.close()
-    print("✅ CostRecords inserted successfully")
+def safe_float(val):
+    try:
+        return max(float(val), 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
-# =================================================
-# Create CostRecord
-# =================================================
 def create_cost_record(session, row, provider):
-
     (
-        resource_id,
-        service_name,
-        account_id,
-        charge_category,
-        charge_frequency,
-        charge_description,
-        charge_class,
-        start,
-        end,
-        billed_cost,
-        effective_cost,
-        contracted_cost,
-        consumed_qty,
-        consumed_unit,
-        vendor_field_1,
-        vendor_field_2,
+        resource_id, resource_name, resource_type,
+        service_name, account_id, sub_account_id,
+        charge_category, charge_frequency, charge_description, charge_class,
+        start, end,
+        billed_cost, effective_cost, contracted_cost, list_cost,
+        consumed_qty, consumed_unit,
+        currency,
+        vendor_field_1, vendor_field_2,
         tags
     ) = row
 
     cost_id = str(uuid.uuid4())
 
-    # Basic validation enforcement
-    billed_cost = max(billed_cost or 0, 0)
-    effective_cost = max(effective_cost or 0, 0)
-    contracted_cost = max(contracted_cost or 0, 0)
-    consumed_qty = max(consumed_qty or 0, 0)
+    billed_cost    = safe_float(billed_cost)
+    effective_cost = safe_float(effective_cost)
+    contracted_cost= safe_float(contracted_cost)
+    list_cost      = safe_float(list_cost)
+    consumed_qty   = safe_float(consumed_qty)
 
-    # -------------------------------------------------
-    # Create CostRecord
-    # -------------------------------------------------
+    # ── CostRecord Node ──────────────────────────────────────────────────────
     session.run("""
-        MERGE (c:CostRecord {id:$id})
-        SET c.billedCost = $billed,
-            c.effectiveCost = $effective,
-            c.contractedCost = $contracted,
-            c.consumedQuantity = $qty,
-            c.consumedUnit = $unit,
-            c.cloudProvider = $provider
+        MERGE (c:CostRecord {id: $id})
+        SET c.billedCost      = $billed,
+            c.effectiveCost   = $effective,
+            c.contractedCost  = $contracted,
+            c.listCost        = $list_cost,
+            c.consumedQuantity= $qty,
+            c.consumedUnit    = $unit,
+            c.currency        = $currency,
+            c.cloudProvider   = $provider
     """,
-        id=cost_id,
-        billed=billed_cost,
-        effective=effective_cost,
-        contracted=contracted_cost,
-        qty=consumed_qty,
-        unit=consumed_unit,
+        id=cost_id, billed=billed_cost, effective=effective_cost,
+        contracted=contracted_cost, list_cost=list_cost,
+        qty=consumed_qty, unit=consumed_unit, currency=currency,
         provider=provider
     )
 
-    # -------------------------------------------------
-    # Parse and Attach Tags
-    # -------------------------------------------------
-    tag_pairs = parse_tags(tags)
-
-    for key, value in tag_pairs.items():
-        session.run("""
-            MERGE (t:Tag {key:$key, value:$value})
-            WITH t
-            MATCH (c:CostRecord {id:$cid})
-            MERGE (c)-[:HAS_TAG]->(t)
-        """, key=key, value=value, cid=cost_id)
-
-    # -------------------------------------------------
-    # Link to Resource
-    # -------------------------------------------------
+    # ── Resource (create inline so INCURRED_BY never fails) ──────────────────
     if resource_id:
         session.run("""
-            MATCH (c:CostRecord {id:$cid})
-            MATCH (r:Resource {id:$rid})
-            MERGE (c)-[:INCURRED_BY]->(r)
-        """, cid=cost_id, rid=resource_id)
+            MERGE (r:Resource {id: $rid})
+            ON CREATE SET r.cloudProvider = $provider,
+                          r.resourceName  = $name,
+                          r.resourceType  = $type
+        """, rid=str(resource_id), provider=provider,
+             name=resource_name, type=resource_type)
 
-    # -------------------------------------------------
-    # Link to Service
-    # -------------------------------------------------
+        session.run("""
+            MATCH (c:CostRecord {id: $cid})
+            MATCH (r:Resource   {id: $rid})
+            MERGE (c)-[:INCURRED_BY]->(r)
+        """, cid=cost_id, rid=str(resource_id))
+
+    # ── Service ──────────────────────────────────────────────────────────────
     if service_name:
         session.run("""
-            MATCH (c:CostRecord {id:$cid})
-            MATCH (s:Service {name:$service})
+            MATCH (c:CostRecord {id: $cid})
+            MATCH (s:Service    {name: $service})
             MERGE (c)-[:USES_SERVICE]->(s)
         """, cid=cost_id, service=service_name)
 
-    # -------------------------------------------------
-    # Link to Account
-    # -------------------------------------------------
+    # ── Account ──────────────────────────────────────────────────────────────
     if account_id:
         session.run("""
-            MATCH (c:CostRecord {id:$cid})
-            MATCH (a:Account {id:$aid})
-            MERGE (c)-[:BELONGS_TO_ACCOUNT]->(a)
-        """, cid=cost_id, aid=account_id)
+            MATCH (c:CostRecord {id: $cid})
+            MATCH (a:Account    {id: $aid})
+            MERGE (c)-[:BELONGS_TO_BILLING_ACCOUNT]->(a)
+        """, cid=cost_id, aid=str(account_id))
 
-    # -------------------------------------------------
-    # Billing Period
-    # -------------------------------------------------
+    # ── Sub-Account ──────────────────────────────────────────────────────────
+    if sub_account_id:
+        session.run("""
+            MERGE (sa:Account {id: $said})
+            ON CREATE SET sa.subAccountId = $said, sa.cloudProvider = $provider
+            WITH sa
+            MATCH (c:CostRecord {id: $cid})
+            MERGE (c)-[:BELONGS_TO_SUBACCOUNT]->(sa)
+        """, said=str(sub_account_id), cid=cost_id, provider=provider)
+
+    # ── BillingPeriod ────────────────────────────────────────────────────────
     if start and end:
         session.run("""
-            MERGE (p:BillingPeriod {start:$start, end:$end})
-        """, start=start, end=end)
-
+            MERGE (p:BillingPeriod {start: $start})
+            ON CREATE SET p.end = $end
+        """, start=str(start), end=str(end))
         session.run("""
-            MATCH (c:CostRecord {id:$cid})
-            MATCH (p:BillingPeriod {start:$start, end:$end})
-            MERGE (c)-[:IN_PERIOD]->(p)
-        """, cid=cost_id, start=start, end=end)
+            MATCH (c:CostRecord    {id: $cid})
+            MATCH (p:BillingPeriod {start: $start})
+            MERGE (c)-[:IN_BILLING_PERIOD]->(p)
+        """, cid=cost_id, start=str(start))
 
-    # -------------------------------------------------
-    # Charge Node
-    # -------------------------------------------------
+    # ── Charge ───────────────────────────────────────────────────────────────
     if charge_category:
         session.run("""
-            MERGE (ch:Charge {
-                category:$category,
-                description:$description
-            })
-            SET ch.frequency = $frequency,
-                ch.chargeClass = $charge_class
+            MERGE (ch:Charge {category: $category, description: $description})
+            ON CREATE SET ch.frequency   = $frequency,
+                          ch.chargeClass = $charge_class
         """,
-            category=charge_category,
-            description=charge_description,
+            category=charge_category or "Unknown",
+            description=charge_description or "",
             frequency=charge_frequency,
             charge_class=charge_class
         )
-
         session.run("""
-            MATCH (c:CostRecord {id:$cid})
-            MATCH (ch:Charge {category:$category, description:$description})
+            MATCH (c:CostRecord {id: $cid})
+            MATCH (ch:Charge {category: $category, description: $description})
             MERGE (c)-[:HAS_CHARGE]->(ch)
         """,
             cid=cost_id,
-            category=charge_category,
-            description=charge_description
+            category=charge_category or "Unknown",
+            description=charge_description or ""
         )
 
-    # -------------------------------------------------
-    # Vendor Specific Attributes (MERGE instead of CREATE)
-    # -------------------------------------------------
+    # ── Tags ─────────────────────────────────────────────────────────────────
+    tag_pairs = parse_tags(tags)
+    for key, value in tag_pairs.items():
+        session.run("""
+            MERGE (t:Tag {key: $key, value: $value})
+            WITH t
+            MATCH (c:CostRecord {id: $cid})
+            MERGE (c)-[:HAS_TAG]->(t)
+        """, key=key, value=value, cid=cost_id)
+
+    # ── VendorSpecificAttributes ──────────────────────────────────────────────
     if vendor_field_1 or vendor_field_2:
         session.run("""
             MERGE (v:VendorSpecificAttributes {
-                field1:$f1,
-                field2:$f2,
-                provider:$provider
+                field1: $f1, field2: $f2, provider: $provider
             })
-        """,
-            f1=vendor_field_1,
-            f2=vendor_field_2,
-            provider=provider
-        )
-
+        """, f1=str(vendor_field_1) if vendor_field_1 else "",
+             f2=str(vendor_field_2) if vendor_field_2 else "",
+             provider=provider)
         session.run("""
-            MATCH (c:CostRecord {id:$cid})
+            MATCH (c:CostRecord {id: $cid})
             MATCH (v:VendorSpecificAttributes {
-                field1:$f1,
-                field2:$f2,
-                provider:$provider
+                field1: $f1, field2: $f2, provider: $provider
             })
             MERGE (c)-[:HAS_VENDOR_ATTRS]->(v)
-        """,
-            cid=cost_id,
-            f1=vendor_field_1,
-            f2=vendor_field_2,
-            provider=provider
-        )
+        """, cid=cost_id,
+             f1=str(vendor_field_1) if vendor_field_1 else "",
+             f2=str(vendor_field_2) if vendor_field_2 else "",
+             provider=provider)
+
+
+def _get_col(cursor, table, col_name):
+    """Return col_name if it exists in table, else 'NULL'."""
+    cols = [row[1] for row in cursor.execute(f"PRAGMA table_info({table})").fetchall()]
+    return col_name if col_name in cols else "NULL"
+
+
+def load_cost_records(limit=None):
+    conn = sqlite3.connect("billing.db")
+    cursor = conn.cursor()
+
+    lim = f"LIMIT {limit}" if limit else ""
+
+    # ── AWS ──────────────────────────────────────────────────────────────────
+    print("Loading AWS records...")
+    rn  = _get_col(cursor, "aws_billing", "ResourceName")
+    rt  = _get_col(cursor, "aws_billing", "ResourceType")
+    sub = _get_col(cursor, "aws_billing", "SubAccountId")
+    lc  = _get_col(cursor, "aws_billing", "ListCost")
+    cur = _get_col(cursor, "aws_billing", "BillingCurrency")
+
+    aws_rows = cursor.execute(f"""
+        SELECT ResourceId, {rn}, {rt},
+               ServiceName, BillingAccountId, {sub},
+               ChargeCategory, ChargeFrequency, ChargeDescription, ChargeClass,
+               ChargePeriodStart, ChargePeriodEnd,
+               BilledCost, EffectiveCost, ContractedCost, {lc},
+               ConsumedQuantity, ConsumedUnit,
+               {cur},
+               x_ServiceCode, x_UsageType, Tags
+        FROM aws_billing {lim}
+    """).fetchall()
+
+    # ── Azure ─────────────────────────────────────────────────────────────────
+    print("Loading Azure records...")
+    rn2  = _get_col(cursor, "azure_billing", "ResourceName")
+    rt2  = _get_col(cursor, "azure_billing", "ResourceType")
+    sub2 = _get_col(cursor, "azure_billing", "SubAccountId")
+    lc2  = _get_col(cursor, "azure_billing", "ListCost")
+    cur2 = _get_col(cursor, "azure_billing", "BillingCurrency")
+
+    azure_rows = cursor.execute(f"""
+        SELECT resourceid, {rn2}, {rt2},
+               servicename, billingaccountid, {sub2},
+               chargecategory, chargefrequency, chargedescription, chargeclass,
+               chargeperiodstart, chargeperiodend,
+               billedcost, effectivecost, contractedcost, {lc2},
+               consumedquantity, consumedunit,
+               {cur2},
+               x_skumetercategory, x_skudescription, tags
+        FROM azure_billing {lim}
+    """).fetchall()
+
+    conn.close()
+
+    with driver.session() as session:
+        print(f"  → Inserting {len(aws_rows)} AWS + {len(azure_rows)} Azure records...")
+        for row in aws_rows:
+            create_cost_record(session, row, "AWS")
+        for row in azure_rows:
+            create_cost_record(session, row, "Azure")
+
+    print(f"✅ CostRecords inserted: {len(aws_rows)} AWS + {len(azure_rows)} Azure")
 
 
 if __name__ == "__main__":
