@@ -1,18 +1,4 @@
-Perfect. Now we’ll do this properly — **clean, visual, structured, recruiter-grade**.
 
-Below is your **complete rewritten README** with:
-
-* ✅ System architecture diagram
-* ✅ Hybrid retrieval workflow
-* ✅ Ontology structure diagram
-* ✅ Allocation flow diagram
-* ✅ Clean whitepaper tone
-* ✅ Professional formatting
-* ✅ Proper section hierarchy
-
-You can paste this directly into `README.md`.
-
----
 
 # ☁️ Cloud Cost Knowledge Graph + Hybrid RAG Engine
 
@@ -22,51 +8,70 @@ You can paste this directly into `README.md`.
 
 ## 📌 Executive Summary
 
-This project implements an ontology-driven Cloud Cost Intelligence System aligned with the **FOCUS (FinOps Open Cost & Usage Specification)** standard.
+This project implements a **production-style ontology-driven Cloud Cost Intelligence system** aligned with the **FOCUS (FinOps Open Cost & Usage Specification)** standard.
 
-The system combines:
+The system is designed to prioritize:
 
-* 🧠 Knowledge Graph modeling (Neo4j)
-* 🔎 Semantic vector retrieval (SentenceTransformers)
-* 📊 Deterministic graph reasoning
-* 🤖 LLM fallback (Ollama – used only when necessary)
-* 📈 Confidence scoring
-* 🔍 Structured provenance tracing
-* 🧾 Explicit cost allocation modeling
+* ✅ Deterministic financial correctness
+* ✅ Explainability & provenance tracing
+* ✅ Cross-cloud normalization
+* ✅ Controlled LLM usage (never for cost math)
+* ✅ Production-ready architecture
 
-It is designed to prioritize **accuracy, explainability, and auditability** over blind LLM usage.
+Unlike LLM-only systems, **all financial calculations are executed deterministically inside the graph** using Cypher queries.
+
+The LLM (Ollama) is used only as an optional explanation fallback.
 
 ---
 
-# 🏗 System Architecture
+# 🏗 High-Level Architecture
 
-The system follows a layered, production-style architecture separating ingestion, ontology modeling, retrieval, reasoning, and presentation.
+```mermaid
+flowchart TD
 
-## 🔷 High-Level Architecture
+A[SQLite Billing Data] --> B[Ontology Loader Layer]
+B --> C[Neo4j Knowledge Graph]
 
-<img width="1025" height="2011" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/f983f0d2-6be2-4a4a-bd0f-3b44542dd11e" />
+C --> D[Deterministic Query Engine]
+C --> E[Embedding Layer - SentenceTransformers]
 
+E --> F[Vector Index]
+F --> G[Hybrid Retrieval Engine]
 
-## 🔷 Layer Responsibilities
+D --> H[Answer Assembly]
+G --> H
 
-| Layer           | Responsibility                                   |
-| --------------- | ------------------------------------------------ |
-| Data Layer      | AWS & Azure billing ingestion                    |
-| Ontology Layer  | FOCUS-aligned semantic modeling                  |
-| Embedding Layer | Vector representations of schema & relationships |
-| Retrieval Layer | Hybrid graph + vector retrieval                  |
-| Reasoning Layer | Deterministic Cypher + controlled LLM fallback   |
-| UI Layer        | Display answers, provenance, confidence          |
+H --> I{LLM Needed?}
+I -->|No| J[Graph-Based Answer]
+I -->|Yes| K[LLM Fallback - Ollama]
 
-This separation ensures maintainability and production-readiness.
+J --> L[Confidence Scoring]
+K --> L
+
+L --> M[Streamlit UI / FastAPI API]
+```
+
+---
+
+# 🧠 System Layers
+
+| Layer              | Responsibility                                 |
+| ------------------ | ---------------------------------------------- |
+| Data Layer         | AWS & Azure billing ingestion                  |
+| Ontology Layer     | FOCUS-aligned semantic modeling                |
+| Graph Layer        | Explicit cost, charge, allocation modeling     |
+| Retrieval Layer    | Hybrid graph + vector retrieval                |
+| Reasoning Layer    | Deterministic Cypher + controlled LLM fallback |
+| Presentation Layer | Streamlit UI + REST API                        |
+| Evaluation Layer   | Confidence scoring + query logging             |
 
 ---
 
 # 🧠 Ontology Design
 
-The system models billing semantics explicitly using a knowledge graph.
+All billing semantics are modeled explicitly as graph entities.
 
-## 🔷 Core Entities
+## Core Nodes
 
 * `CostRecord`
 * `Service`
@@ -82,7 +87,7 @@ The system models billing semantics explicitly using a knowledge graph.
 
 ---
 
-## 🔷 Ontology Structure
+## Ontology Graph Structure
 
 ```mermaid
 graph TD
@@ -112,144 +117,107 @@ CA -->|ALLOCATED_TO| CC
 FC -->|DERIVED_BY| DR
 ```
 
+This ensures:
+
+* Traceable cost logic
+* Vendor normalization
+* Allocation transparency
+* Future extensibility
+
 ---
 
 # 📘 FOCUS Standard Alignment
 
-FOCUS columns are modeled explicitly as semantic entities:
+FOCUS columns are modeled as first-class semantic nodes:
 
-```
+```cypher
 (FOCUSColumn {
   name,
   description,
   dataType,
   nullable,
   validationRule,
-  standard = "FOCUS 1.0"
+  standard: "FOCUS 1.0"
 })
 ```
 
-### Vendor Normalization
+Vendor normalization:
 
-```
+```cypher
 (AWSColumn)-[:MAPS_TO]->(FOCUSColumn)
 (AzureColumn)-[:MAPS_TO]->(FOCUSColumn)
 ```
 
-Each mapping includes:
-
-* transformationType
-* semantic embedding
-
-This enables cross-provider normalization.
-
 ---
 
-# 🧮 Derivation Modeling
+# 🧮 Explicit Derivation Modeling
 
-Derived semantics are explicitly modeled:
+Example:
 
 ```
 EffectiveCost = BilledCost + AmortizedCost
 ```
 
-Represented as:
+Modeled as:
 
-```
+```cypher
 (FOCUSColumn)-[:DERIVED_BY]->(DerivationRule)
 ```
 
-This ensures traceable cost logic.
+This enables:
+
+* Transparent cost derivation
+* Explainable financial logic
+* Extensible rule definitions
 
 ---
 
 # 🧾 Cost Allocation Modeling
 
-Cost allocation is explicitly represented.
-
-## 🔷 Allocation Graph Structure
+Allocation is explicitly represented:
 
 ```mermaid
 flowchart LR
-
-CR[CostRecord]
-T[Tag: CostCentre]
-CA[CostAllocation]
-CC[CostCentre]
-
-CR -->|HAS_TAG| T
-CR -->|ALLOCATED_VIA| CA
-CA -->|ALLOCATED_TO| CC
+CR[CostRecord] -->|HAS_TAG| T[Tag]
+CR -->|ALLOCATED_VIA| CA[CostAllocation]
+CA -->|ALLOCATED_TO| CC[CostCentre]
 ```
 
-### Allocation Characteristics
+Characteristics:
 
-* Basis: Tag-driven
-* Method: Proportional
+* Tag-driven
+* Proportional allocation
 * Derived from EffectiveCost
-* Fully traceable in provenance
-
-Allocation explanation is returned in query responses.
+* Fully auditable
 
 ---
 
 # 🔎 Hybrid Retrieval Strategy
 
-The system uses a **hybrid graph + vector retrieval model**.
-
-## 🔷 Retrieval Workflow
-
-```mermaid
-flowchart TD
-
-Q[User Query] --> A[Intent Detection]
-
-A -->|Structured Intent| B[Deterministic Graph Query]
-A -->|Semantic Intent| C[Vector Search]
-
-C --> D[Graph Context Expansion]
-
-B --> E[Answer Assembly]
-D --> E
-
-E --> F{Enough Evidence?}
-
-F -->|Yes| G[Graph-Based Answer]
-F -->|No| H[LLM Fallback]
-
-H --> G
-
-G --> I[Confidence Scoring]
-I --> J[Display with Provenance]
-```
+| Scenario                 | Engine Used         |
+| ------------------------ | ------------------- |
+| Cost aggregation         | Deterministic Graph |
+| Commitment filtering     | Deterministic Graph |
+| Billing period filtering | Deterministic Graph |
+| Cross-cloud comparison   | Deterministic Graph |
+| Schema explanation       | Hybrid              |
+| Concept definition       | Hybrid              |
+| Out-of-schema question   | LLM fallback        |
 
 ---
 
-## 🔷 Why Hybrid?
+# 📊 Deterministic vs LLM Separation
 
-* Deterministic graph queries ensure precision.
-* Vector search supports semantic flexibility.
-* LLM is used only when necessary.
-* Minimizes hallucination risk.
-* Maintains explainability.
+| Component                    | Uses LLM? |
+| ---------------------------- | --------- |
+| Cost math                    | ❌         |
+| Commitment filtering         | ❌         |
+| Aggregation                  | ❌         |
+| Allocation logic             | ❌         |
+| Schema explanation           | Optional  |
+| Natural language explanation | Optional  |
 
----
-
-# 📊 Commitment-Aware Cost Analysis
-
-The system supports excluding commitment charges:
-
-```cypher
-WHERE ch.category <> "Commitment"
-```
-
-Example:
-
-```
-Total AWS cost without commitment charges
-```
-
-This enables accurate spend analysis.
+This prevents hallucinated financial values.
 
 ---
 
@@ -257,33 +225,23 @@ This enables accurate spend analysis.
 
 Confidence is computed using:
 
-* Deterministic vs LLM reasoning
-* Number of provenance paths
+* Intent type
+* Provenance path count
 * Retrieval method
+* LLM penalty (if used)
 
-Example logic:
-
-* Graph-only reasoning → higher confidence
-* More provenance → higher confidence
-* LLM fallback → slight penalty
-
-This provides reliability estimation per query.
+Graph-only answers → Higher confidence
+LLM fallback → Slight confidence reduction
 
 ---
 
-# 🔍 Explainability & Provenance
+# 🔍 Provenance Example
 
-Each response includes:
-
-* Structured provenance paths
-* Retrieval method (graph / hybrid)
-* Confidence score
-* Allocation explanation (if applicable)
-
-Example provenance:
+Each answer returns explicit graph paths:
 
 ```
-CostRecord → USES_SERVICE → Service(AWS Lambda)
+CostRecord → IN_PERIOD(2024-01)
+CostRecord → HAS_CHARGE(Usage)
 ```
 
 This ensures auditability.
@@ -299,55 +257,13 @@ Each query logs:
 * Retrieval method
 * Billing period
 * Provenance count
-* Confidence score
+* Confidence
 * Timestamp
 
-Example log entry:
-
-```json
-{
-  "query": "Total AWS cost for 2024-01",
-  "intent": "cost_aggregation",
-  "retrieval_method": "graph",
-  "billing_period": "2024-01",
-  "provenance_count": 2,
-  "confidence": 0.88,
-  "timestamp": "2026-03-02T10:15:00"
-}
-```
-
----
-
-# 🧪 Example Queries
-
-### FOCUS Schema
+Stored in:
 
 ```
-What are the core FOCUS columns?
-```
-
-### Column Definition
-
-```
-Define EffectiveCost
-```
-
-### Cost Aggregation
-
-```
-Total AWS cost for 2024-01
-```
-
-### Commitment-Aware Analysis
-
-```
-Total AWS cost without commitment charges
-```
-
-### Cross-Cloud Comparison
-
-```
-Compare AWS and Azure spend for January 2024
+evaluation_log.json
 ```
 
 ---
@@ -360,23 +276,49 @@ Compare AWS and Azure spend for January 2024
 pip install -r requirements.txt
 ```
 
-## 2️⃣ Start Neo4j
+## 2️⃣ Configure Environment
 
-Ensure Neo4j is running locally.
+Create `.env`:
 
-## 3️⃣ Load Ontology
-
-```bash
-python graph/focus_schema_loader.py
+```
+NEO4J_PASSWORD=your_password_here
 ```
 
-## 4️⃣ Load Billing Data
+## 3️⃣ Start Neo4j
 
-```bash
-python graph/cost_record_loader.py
+Ensure running at:
+
+```
+bolt://127.0.0.1:7687
 ```
 
-## 5️⃣ Launch Application
+Test:
+
+```python
+from graph.neo4j_connection import driver
+with driver.session(database="neo4j") as s:
+    print(s.run("RETURN 1").single())
+```
+
+## 4️⃣ Create Demo DB
+
+```bash
+python setup_demo_db.py
+```
+
+## 5️⃣ Load Ontology
+
+```bash
+python -m graph.focus_schema_loader
+```
+
+## 6️⃣ Load Cost Records
+
+```bash
+python -m graph.cost_record_loader
+```
+
+## 7️⃣ Launch UI
 
 ```bash
 streamlit run app.py
@@ -384,54 +326,93 @@ streamlit run app.py
 
 ---
 
-# 🔮 Future Enhancements
+# 🌐 REST API (Optional)
 
-* Multi-tenant billing isolation
-* Real-time ingestion pipeline
-* Cost anomaly detection
-* Advanced path-based reasoning
-* REST API deployment
-* Role-based access control
+Start API:
 
----
+```bash
+uvicorn api:app --reload
+```
 
-# 🎯 Key Design Decisions
+Visit:
 
-### Why Ontology-First?
-
-To normalize vendor differences and enable traceable semantic reasoning.
-
-### Why Deterministic Over LLM?
-
-Financial queries require accuracy and auditability.
-
-### Why Hybrid Retrieval?
-
-Pure vector systems hallucinate.
-Pure graph systems lack flexibility.
-Hybrid combines precision + semantic flexibility.
-
-### Why Confidence Scoring?
-
-Enterprise systems require reliability estimation.
-
-### Why Explicit Allocation Modeling?
-
-FinOps workflows demand transparent cost distribution logic.
+```
+http://127.0.0.1:8000/docs
+```
 
 ---
 
-# 📌 Final Statement
+# 🤖 Optional: Enable LLM Fallback
 
-This system demonstrates:
+Install Ollama:
+
+[https://ollama.com](https://ollama.com)
+
+Run:
+
+```bash
+ollama serve
+ollama run phi
+```
+
+System remains fully functional without LLM.
+
+---
+
+# 💻 Hardware Notes
+
+Minimum:
+
+* 8GB RAM → Graph-only mode
+* 16GB RAM → LLM enabled
+
+LLM is optional.
+
+---
+
+# 🛠 Troubleshooting
+
+| Issue         | Solution             |
+| ------------- | -------------------- |
+| Neo4j refused | Ensure Neo4j running |
+| LLM error     | Run `ollama serve`   |
+| CUDA error    | Use CPU mode         |
+| Missing DB    | Run setup_demo_db.py |
+
+---
+
+# 🔬 Future Research Extensions
+
+* Semantic query planner
+* NL → Cypher translator
+* Multi-hop reasoning engine
+* Graph anomaly detection
+* Cost forecasting
+* RBAC enforcement
+
+---
+
+# 🎯 What This Demonstrates
 
 * Ontology engineering
-* Knowledge graph modeling
+* Graph-native cost reasoning
 * Hybrid retrieval design
-* Allocation-aware cost reasoning
-* Explainable AI principles
-* Production-aware architecture
+* Deterministic financial logic
+* Commitment-aware filtering
+* Allocation traceability
+* Confidence-scored explainability
+* Production-grade system separation
 
-It is designed for accurate, transparent, and extensible cloud cost intelligence.
+---
+
+# 🏁 This system prioritizes:
+
+* Financial correctness
+* Ontological clarity
+* Explainable AI principles
+* Production realism
+* Extensibility for enterprise FinOps workflows
+
+It serves as a foundation for scalable, explainable Cloud Cost Intelligence platforms.
 
 ---
