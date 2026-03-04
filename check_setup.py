@@ -34,11 +34,30 @@ print(f"\n{SEP}")
 print("  [1] Python Version")
 print(SEP)
 ver = sys.version_info
-check(
-    f"Python {ver.major}.{ver.minor}.{ver.micro}",
-    ver >= (3, 11),
-    "Python 3.11+ required.\nDownload: https://www.python.org/downloads/"
-)
+
+if ver >= (3, 13):
+    # 3.13+ doesn't have stable torch/sentence-transformers wheels yet
+    check(
+        f"Python {ver.major}.{ver.minor}.{ver.micro} — TOO NEW ⚠️",
+        False,
+        f"Python 3.11.x or 3.12.x is required.\n"
+        f"You are running Python {ver.major}.{ver.minor}.{ver.micro} which does NOT have\n"
+        f"stable wheels for torch and sentence-transformers yet.\n\n"
+        f"Fix: Activate your Python 3.11 virtual environment FIRST:\n"
+        f"  Windows: venv\\Scripts\\activate\n"
+        f"  macOS/Linux: source venv/bin/activate\n\n"
+        f"Then re-run: python check_setup.py\n\n"
+        f"If you don't have Python 3.11 installed:\n"
+        f"  Download: https://www.python.org/downloads/release/python-3119/"
+    )
+elif ver >= (3, 11):
+    check(f"Python {ver.major}.{ver.minor}.{ver.micro} — Perfect ✅", True)
+else:
+    check(
+        f"Python {ver.major}.{ver.minor}.{ver.micro} — too old",
+        False,
+        "Python 3.11+ required.\nDownload: https://www.python.org/downloads/release/python-3119/"
+    )
 
 # ── 2. Required packages ──────────────────────────────────────
 print(f"\n{SEP}")

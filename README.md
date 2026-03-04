@@ -296,9 +296,16 @@ OPENAI_API_KEY=                     # Optional fallback
 > **Get a free Gemini API key:** https://aistudio.google.com/apikey
 
 ### Prerequisites
-- Python 3.11+
+- **Python 3.11.x** (⚠️ NOT 3.13 or 3.14 — `torch` and `sentence-transformers` don't have stable wheels for those yet)
+  - Download Python 3.11: https://www.python.org/downloads/release/python-3119/
 - Neo4j Desktop or Neo4j Community Edition (running at `bolt://127.0.0.1:7687`)
 - `GEMINI_API_KEY` in `.env` for LLM answers
+
+> **⚠️ Important:** If your system has multiple Python versions installed, always activate the **Python 3.11 virtual environment** before running any commands:
+> ```bash
+> venv\Scripts\activate      # Windows
+> source venv/bin/activate   # macOS/Linux
+> ```
 
 ### 5. Start Neo4j
 
