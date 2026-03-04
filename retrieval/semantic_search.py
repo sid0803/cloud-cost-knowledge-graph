@@ -1,14 +1,20 @@
 #retrieval/semantic_search.py
 
 from graph.neo4j_connection import driver
-from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+_model = None
+
+def get_model():
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 
 def hybrid_search(query, top_k=3):
 
-    query_embedding = model.encode(query).tolist()
+    query_embedding = get_model().encode(query).tolist()
 
     with driver.session() as session:
         result = session.run("""

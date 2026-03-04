@@ -11,7 +11,9 @@ def test_11_queries():
        "When calculating commitment utilization using Commitment Discount Quantity, which charge categories must be excluded to avoid double counting?",
        "Why does my total increase when I include commitment purchases and usage together?",
        "which cost type should be used to analyze cloud spend?",
-       "Can ContractedCost differ from ContractedUnitPrice × PricingQuantity for a normal Usage charge? If so, when"
+       "Can ContractedCost differ from ContractedUnitPrice × PricingQuantity for a normal Usage charge? If so, when",
+       "What is the derivation formula for EffectiveCost and when does it differ from BilledCost?",
+       "Show total AWS cost vs Azure cost breakdown by service category",
     ]
 
     results = []

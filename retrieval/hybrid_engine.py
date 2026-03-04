@@ -2,9 +2,15 @@
 
 import sqlite3
 from graph.neo4j_connection import driver
-from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+_model = None
+
+def get_model():
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
 
 
 # -------------------------------------------------
@@ -73,7 +79,7 @@ def calculate_cost_for_resources(resource_ids):
 def hybrid_query(user_query, top_k=5):
 
     # 1️⃣ Vector Search
-    query_embedding = model.encode(user_query).tolist()
+    query_embedding = get_model().encode(user_query).tolist()
 
     with driver.session() as session:
         result = session.run("""
