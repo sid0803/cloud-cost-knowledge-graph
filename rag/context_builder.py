@@ -153,45 +153,56 @@ def detect_intent(query: str):
     if ("focus" in q and ("column" in q or "spec" in q or "differ" in q)):
         return "focus_schema"
 
-    # Column definition
+    # ContractedCost QUESTION — must come BEFORE column_definition
+    # (ContractedCost is in FOCUS_COLUMN_MAP and would be caught as column_definition otherwise)
+    if ("contracted" in q and "unit" in q) or ("contractedcost" in q.replace(" ", "").lower() and ("differ" in q or "when" in q or "?" in q or "can" in q)):
+        return "contracted_cost_question"
+
+    # Column definition (check BEFORE generic cost checks)
     matched = [FOCUS_COLUMN_MAP[k] for k in FOCUS_COLUMN_MAP if k in q]
     if matched:
         return "column_definition", matched
 
+    # Storage comparison — must be BEFORE cross_cloud_comparison (both have AWS+Azure+cost)
+    if ("storage" in q and "compare" in q) or ("storage" in q and ("aws" in q or "azure" in q) and "cost" in q):
+        return "storage_comparison"
+
+    # Cross-cloud comparison — MUST be before cost_aggregation which also catches 'total'/'cost'
+    if (
+        ("aws" in q and "azure" in q) and
+        ("cost" in q or "breakdown" in q or "compare" in q or "total" in q)
+    ) or ("cross" in q and "cloud" in q) or ("compare" in q and "provider" in q):
+        return "cross_cloud_comparison"
+
     # AWS compute
-    if "aws" in q and "compute" in q:
+    if "aws" in q and ("compute" in q or "ec2" in q or "lambda" in q):
         return "aws_compute"
 
     # Azure equivalent
     if ("azure" in q and "equivalent" in q) or ("equivalent" in q and "s3" in q) or ("azure" in q and "s3" in q):
         return "azure_equivalent"
 
-    # Storage comparison
-    if ("compare" in q and "storage" in q) or ("storage" in q and ("aws" in q or "azure" in q) and "cost" in q):
-        return "storage_comparison"
 
-    # Top 5 production
     if ("top" in q and "expensive" in q) or ("top" in q and "production" in q) or ("most expensive" in q):
         return "top_resources"
 
     # Commitment double counting
-    if "commitment" in q and ("double" in q or "utilization" in q or "exclude" in q):
+    if "commitment" in q and ("double" in q or "utilization" in q or "exclude" in q or "excluded" in q or "charge categor" in q):
         return "commitment_double_counting"
 
-    # Why total increases
-    if ("total" in q and "increase" in q) or ("why" in q and "total" in q and "commitment" in q):
+    # Why total increases — commitment purchases cause total to grow
+    if (("why" in q and "total" in q) or
+            ("total" in q and "increase" in q) or
+            ("commitment" in q and "purchase" in q) or
+            ("include" in q and "commitment" in q)):
         return "why_total_increases"
 
     # Which cost type / analyze cloud spend
     if ("cost type" in q and "analyze" in q) or ("which cost" in q) or ("analyze cloud spend" in q) or ("cloud spend" in q):
         return "cost_type_analysis"
 
-    # ContractedCost vs ContractedUnitPrice
-    if "contractedcost" in q.replace(" ", "").lower() or ("contracted" in q and "unit" in q):
-        return "contracted_cost_question"
-
-    # Cross-cloud comparison
-    if "compare" in q or ("cross" in q and "cloud" in q):
+    # Compare (generic cross-cloud)
+    if "compare" in q:
         return "cross_cloud_comparison"
 
     # Cost aggregation (generic)
