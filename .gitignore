@@ -26,9 +26,10 @@ evaluation_log.json
 # -------------------------
 # Raw Data Files
 # -------------------------
-data/
-*.xls
-*.xlsx
+# NOTE: data/ XLS files ARE committed — required for setup_demo_db.py
+# Only exclude large generated outputs
+*.xlsx~
+~$*.xls
 
 # -------------------------
 # Streamlit
