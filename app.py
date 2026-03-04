@@ -241,10 +241,13 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN CONTENT
 # ─────────────────────────────────────────────────────────────────────────────
+# ── Backend status banner (soft warning, no hard stop) ───────────────────────
 if not BACKEND_OK:
-    st.error(f"❌ Backend connection failed: {BACKEND_ERROR}")
-    st.info("Make sure Neo4j is running and `.env` has NEO4J_PASSWORD set.")
-    st.stop()
+    st.warning(
+        f"⚠️ **Backend Warning:** {BACKEND_ERROR}\n\n"
+        "Graph-based queries may not work. Ensure Neo4j is running at `bolt://127.0.0.1:7687` "
+        "and `NEO4J_PASSWORD` is set in your `.env` file. LLM-only queries will still work."
+    )
 
 # ── Query Input ───────────────────────────────────────────────────────────────
 col_input, col_btn = st.columns([5, 1])

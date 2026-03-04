@@ -809,94 +809,126 @@ def handle_cross_cloud_comparison(question, billing_period):
 # MAIN ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────────────
 def generate_answer(question: str) -> dict:
-    data           = build_context(question)
-    intent         = data.get("intent", "general")
-    billing_period = data.get("billing_period")
+    """Main entry point — ALWAYS returns a dict, never raises."""
+    try:
+        data           = build_context(question)
+        intent         = data.get("intent", "general")
+        billing_period = data.get("billing_period")
 
-    # Route to deterministic handlers
-    if intent == "focus_schema":
-        return handle_focus_schema(data, question, billing_period)
+        # Route to deterministic handlers
+        if intent == "focus_schema":
+            return handle_focus_schema(data, question, billing_period)
 
-    if intent == "aws_compute":
-        return handle_aws_compute(question, billing_period)
+        if intent == "aws_compute":
+            return handle_aws_compute(question, billing_period)
 
-    if intent == "azure_equivalent":
-        return handle_azure_equivalent(question, billing_period)
+        if intent == "azure_equivalent":
+            return handle_azure_equivalent(question, billing_period)
 
-    if intent == "storage_comparison":
-        return handle_storage_comparison(question, billing_period)
+        if intent == "storage_comparison":
+            return handle_storage_comparison(question, billing_period)
 
-    if intent == "top_resources":
-        return handle_top_resources(question, billing_period)
+        if intent == "top_resources":
+            return handle_top_resources(question, billing_period)
 
-    if intent == "commitment_double_counting":
-        return handle_commitment_double_counting(question, billing_period)
+        if intent == "commitment_double_counting":
+            return handle_commitment_double_counting(question, billing_period)
 
-    if intent == "why_total_increases":
-        return handle_why_total_increases(question, billing_period)
+        if intent == "why_total_increases":
+            return handle_why_total_increases(question, billing_period)
 
-    if intent == "cost_type_analysis":
-        return handle_cost_type_analysis(question, billing_period)
+        if intent == "cost_type_analysis":
+            return handle_cost_type_analysis(question, billing_period)
 
-    if intent == "contracted_cost_question":
-        return handle_contracted_cost_question(question, billing_period)
+        if intent == "contracted_cost_question":
+            return handle_contracted_cost_question(question, billing_period)
 
-    if intent == "cross_cloud_comparison":
-        return handle_cross_cloud_comparison(question, billing_period)
+        if intent == "cross_cloud_comparison":
+            return handle_cross_cloud_comparison(question, billing_period)
 
-    if intent == "cost_aggregation":
-        return handle_cost_aggregation(question, billing_period, data)
+        if intent == "cost_aggregation":
+            return handle_cost_aggregation(question, billing_period, data)
 
-    # ── Column definition ─────────────────────────────────────────────────────
-    if intent == "column_definition":
-        context = data.get("context", "")
-        cols    = data.get("columns", [])
-        provenance = [{"from": "FOCUSColumn", "relationship": "DESCRIBES", "to": c} for c in cols]
+        # ── Column definition ─────────────────────────────────────────────────
+        if intent == "column_definition":
+            context = data.get("context", "")
+            cols    = data.get("columns", [])
+            provenance = [{"from": "FOCUSColumn", "relationship": "DESCRIBES", "to": c} for c in cols]
 
-        if context:
-            prompt = (
-                "You are a FOCUS 1.0 cloud cost expert.\n\n"
-                f"Context from knowledge graph:\n{context}\n\n"
-                f"Question: {question}\n\n"
-                "Answer clearly using the context. Cite column names and their properties."
+            if context:
+                prompt = (
+                    "You are a FOCUS 1.0 cloud cost expert.\n\n"
+                    f"Context from knowledge graph:\n{context}\n\n"
+                    f"Question: {question}\n\n"
+                    "Answer clearly using the context. Cite column names and their properties."
+                )
+                answer = call_llm(prompt)
+                used_llm = True
+            else:
+                answer = f"Column definitions for: {', '.join(cols)}\n\n{context or 'No additional details found.'}"
+                used_llm = False
+
+            conf = compute_confidence("column_definition", provenance, used_llm=used_llm)
+            return make_result(answer, provenance, "hybrid" if used_llm else "graph",
+                               conf, "column_definition", billing_period, question)
+
+        # ── General hybrid fallback ───────────────────────────────────────────
+        context    = data.get("context", "")
+        provenance = data.get("provenance", [])
+
+        # If graph didn't find specific data, use general schema knowledge as context
+        if not context:
+            context = (
+                "This is a Cloud Cost Knowledge Graph based on the FOCUS 1.0 standard. "
+                "It contains billing data from AWS and Azure cloud providers, including: "
+                "CostRecords with fields like EffectiveCost, BilledCost, ListCost, ContractedCost; "
+                "Services (EC2, S3, Lambda, Azure VMs, Azure Storage, Azure SQL, etc.); "
+                "ChargeCategories (Usage, Purchase, Tax, Credit); "
+                "Accounts and ResourceGroups linked to cost records. "
+                "AWS and Azure vendor columns are mapped to FOCUS standard columns."
             )
-            answer = call_llm(prompt)
-            used_llm = True
-        else:
-            answer = f"Column definitions for: {', '.join(cols)}\n\n{context or 'No additional details found.'}"
-            used_llm = False
+            provenance = [{"from": "system", "relationship": "schema_context", "to": "FOCUS 1.0 KG"}]
 
-        conf = compute_confidence("column_definition", provenance, used_llm=used_llm)
-        return make_result(answer, provenance, "hybrid" if used_llm else "graph",
-                           conf, "column_definition", billing_period, question)
-
-    # ── General hybrid fallback ───────────────────────────────────────────────
-    context    = data.get("context", "")
-    provenance = data.get("provenance", [])
-
-    # If graph didn't find specific data, use general schema knowledge as context
-    if not context:
-        context = (
-            "This is a Cloud Cost Knowledge Graph based on the FOCUS 1.0 standard. "
-            "It contains billing data from AWS and Azure cloud providers, including: "
-            "CostRecords with fields like EffectiveCost, BilledCost, ListCost, ContractedCost; "
-            "Services (EC2, S3, Lambda, Azure VMs, Azure Storage, Azure SQL, etc.); "
-            "ChargeCategories (Usage, Purchase, Tax, Credit); "
-            "Accounts and ResourceGroups linked to cost records. "
-            "AWS and Azure vendor columns are mapped to FOCUS standard columns."
+        prompt = (
+            "You are a cloud cost ontology and FinOps expert with access to a FOCUS 1.0 knowledge graph "
+            "containing AWS and Azure billing data.\n\n"
+            f"Knowledge Graph Context:\n{context}\n\n"
+            f"Question: {question}\n\n"
+            "Provide a clear, structured answer. If exact numbers aren't available from context, "
+            "explain the concept using FOCUS 1.0 standards and general cloud pricing knowledge."
         )
-        provenance = [{"from": "system", "relationship": "schema_context", "to": "FOCUS 1.0 KG"}]
+        answer    = call_llm(prompt)
+        used_llm  = True
+        conf      = compute_confidence("general", provenance, used_llm=True)
 
-    prompt = (
-        "You are a cloud cost ontology and FinOps expert with access to a FOCUS 1.0 knowledge graph "
-        "containing AWS and Azure billing data.\n\n"
-        f"Knowledge Graph Context:\n{context}\n\n"
-        f"Question: {question}\n\n"
-        "Provide a clear, structured answer. If exact numbers aren't available from context, "
-        "explain the concept using FOCUS 1.0 standards and general cloud pricing knowledge."
-    )
-    answer    = call_llm(prompt)
-    used_llm  = True
-    conf      = compute_confidence("general", provenance, used_llm=True)
+        return make_result(answer, provenance, "hybrid", conf, "general", billing_period, question)
 
-    return make_result(answer, provenance, "hybrid", conf, "general", billing_period, question)
+    except Exception as e:
+        # Always return a valid dict — never crash the UI
+        print(f"generate_answer error: {e}")
+        error_msg = str(e)
+        friendly = (
+            f"⚠️ An error occurred while processing your query.\n\n"
+            f"**Query:** {question}\n\n"
+        )
+        if "Neo4j" in error_msg or "neo4j" in error_msg or "ServiceUnavailable" in error_msg:
+            friendly += (
+                "**Likely cause:** Neo4j database is not running or not reachable.\n\n"
+                "**Fix:** Start Neo4j Desktop and ensure your database is running at `bolt://127.0.0.1:7687`.\n\n"
+                "Then re-run `python setup_demo_db.py` if this is a fresh setup."
+            )
+        elif "GEMINI" in error_msg.upper() or "API" in error_msg.upper():
+            friendly += (
+                "**Likely cause:** LLM API key issue.\n\n"
+                "**Fix:** Add `GEMINI_API_KEY=your_key` to your `.env` file.\n"
+                "Get a free key at https://aistudio.google.com/apikey"
+            )
+        else:
+            friendly += f"**Error detail:** `{error_msg}`"
+
+        return {
+            "answer": friendly,
+            "provenance": [],
+            "retrieval_method": "error",
+            "confidence": 0.0,
+        }
