@@ -382,8 +382,8 @@ Results are saved to `evaluation_log.json`.
 | 7 | Why total increases with commitment purchases | `why_total_increases` |
 | 8 | Which cost type to analyze cloud spend | `cost_type_analysis` |
 | 9 | ContractedCost vs ContractedUnitPrice × PricingQuantity | `contracted_cost_question` |
-| 10 | EffectiveCost derivation | `column_definition` |
-| 11 | AWS vs Azure total cost breakdown | `cross_cloud_comparison` |
+| 10 | EffectiveCost derivation formula and when it differs from BilledCost | `column_definition` |
+| 11 | AWS vs Azure total cost breakdown by service category | `cross_cloud_comparison` |
 
 ---
 
@@ -392,10 +392,11 @@ Results are saved to `evaluation_log.json`.
 | Issue | Solution |
 |-------|----------|
 | `NEO4J_PASSWORD not set` | Add password to `.env` file |
-| `Failed to connect to Neo4j` | Ensure Neo4j is running at `bolt://127.0.0.1:7687` |
+| `Failed to connect to Neo4j` | Ensure Neo4j is running at `bolt://127.0.0.1:7687` — the app now shows a soft warning instead of crashing |
 | `No data found` | Re-run `python setup_demo_db.py` |
+| `FileNotFoundError` for XLS | XLS files are committed in `data/`. Run `git pull` then `python setup_demo_db.py`. The loader auto-searches `data/`, `db/`, and project root |
 | LLM unavailable / No LLM error | Add `GEMINI_API_KEY` to `.env` (free at aistudio.google.com) |
-| Gemini 429 Rate Limited | Wait 1 minute — free tier resets per minute (15 RPM) |
+| Gemini 429 Rate Limited | Wait 1 minute — free tier resets per minute (15 RPM). The system auto-retries once before falling back |
 | `pyvis` not found | `pip install pyvis` for graph visualization |
 | CUDA error | Sentence transformers auto-falls back to CPU |
 | Slow first query | Embedding model loads lazily on first use — subsequent queries are fast |
@@ -409,19 +410,19 @@ cloud-cost-knowledge-graph/
 ├── app.py                      # Streamlit UI (premium dark-mode)
 ├── api.py                      # FastAPI REST API (Part F bonus)
 ├── setup_demo_db.py            # One-command full pipeline setup
-├── run_evaluations.py          # Automated 11-query evaluation runner
+├── run_evaluations.py          # Automated 11-query evaluation runner (all 11 queries)
 ├── requirements.txt            # All dependencies
 ├── .env                        # NEO4J + LLM credentials (not committed)
 ├── .env.example                # Template for .env
-├── billing.db                  # SQLite (auto-generated)
+├── billing.db                  # SQLite (auto-generated, not committed)
 ├── evaluation_log.json         # Query evaluation log (auto-generated)
 │
-├── data/                       # Raw billing XLS files
+├── data/                       # Raw billing XLS files (committed to repo)
 │   ├── aws_test-focus-00001.snappy_transformed.xls
 │   └── focusazure_anon_transformed.xls
 │
 ├── graph/                      # Graph construction layer
-│   ├── neo4j_connection.py     # Driver setup
+│   ├── neo4j_connection.py     # Driver setup (graceful failure if Neo4j offline)
 │   ├── schema.py               # Constraints + full-text + vector indexes
 │   ├── focus_schema_loader.py  # FOCUS 1.0 ontology (31 cols, 14 classes)
 │   ├── metadata_loader.py      # Services + Accounts + Resources + Locations
@@ -429,18 +430,18 @@ cloud-cost-knowledge-graph/
 │   ├── cost_allocation_loader.py # CostAllocation + CostCentre nodes
 │   ├── service_mapping.py      # AWS ↔ Azure equivalence relationships
 │   ├── embed_services.py       # Service node embeddings
-│   └── embed_all_nodes.py      # All-node embedding pipeline
+│   └── embed_all_nodes.py      # All-node embedding pipeline (lazy model load)
 │
 ├── rag/                        # RAG pipeline layer
 │   ├── context_builder.py      # Intent detection + hybrid context assembly
-│   └── llm_pipeline.py         # Gemini 2.0→OpenAI→Ollama chain + handlers
+│   └── llm_pipeline.py         # Gemini 2.0→OpenAI→Ollama chain + 11 handlers
 │
 ├── retrieval/                  # Retrieval utilities
-│   ├── hybrid_engine.py        # Cross-cloud vector + graph retrieval
-│   └── semantic_search.py      # Pure vector search utility
+│   ├── hybrid_engine.py        # Cross-cloud vector + graph retrieval (lazy model)
+│   └── semantic_search.py      # Pure vector search utility (lazy model)
 │
 └── db/                         # SQLite utilities
-    └── init_sqlite.py          # XLS → SQLite loader
+    └── init_sqlite.py          # XLS → SQLite loader (auto-discovers files in data/, db/, root)
 ```
 
 ---
