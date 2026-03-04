@@ -258,28 +258,30 @@ Intent Detection ──► 11 structured intents + unlimited general queries
 
 ## 🚀 Setup & Installation
 
-### Prerequisites
-- Python 3.11+
-- Neo4j Desktop or Neo4j Community Edition (running at `bolt://127.0.0.1:7687`)
-- `data/` folder with `aws_test-focus-00001.snappy_transformed.xls` and `focusazure_anon_transformed.xls`
+> [!IMPORTANT]
+> The billing XLS data files (`aws_test-focus-00001.snappy_transformed.xls` and `focusazure_anon_transformed.xls`) are **committed to this repository** inside the `data/` folder. You do NOT need to supply them manually after cloning.
 
-### 1. Create Virtual Environment
+### ⚡ Quick Start (Fresh Clone)
 
 ```bash
+# 1. Clone the repo
+git clone https://github.com/<your-username>/cloud-cost-knowledge-graph.git
+cd cloud-cost-knowledge-graph
+
+# 2. Create virtual environment
 python -m venv venv
-venv\Scripts\activate        # Windows
-# or: source venv/bin/activate  # macOS/Linux
-```
+venv\Scripts\activate          # Windows
+# source venv/bin/activate    # macOS / Linux
 
-### 2. Install Dependencies
-
-```bash
+# 3. Install dependencies
 pip install -r requirements.txt
+
+# 4. Configure environment — copy the example and fill in your values
+copy .env.example .env        # Windows
+# cp .env.example .env        # macOS / Linux
 ```
 
-### 3. Configure Environment
-
-Create `.env` (or copy `.env.example`):
+Edit `.env`:
 
 ```env
 NEO4J_URI=neo4j://127.0.0.1:7687
@@ -291,30 +293,35 @@ GEMINI_API_KEY=your_gemini_api_key
 OPENAI_API_KEY=                     # Optional fallback
 ```
 
-> **Get Gemini API key (free):** https://aistudio.google.com/apikey
+> **Get a free Gemini API key:** https://aistudio.google.com/apikey
 
-### 4. Start Neo4j
+### Prerequisites
+- Python 3.11+
+- Neo4j Desktop or Neo4j Community Edition (running at `bolt://127.0.0.1:7687`)
+- `GEMINI_API_KEY` in `.env` for LLM answers
 
-Ensure Neo4j is running at `bolt://127.0.0.1:7687`
+### 5. Start Neo4j
 
-### 5. Run Full Setup (one command)
+Open **Neo4j Desktop** → Start your database → wait for 🟢 Running status.
+
+### 6. Run Full Setup (one command)
 
 ```bash
 python setup_demo_db.py
 ```
 
 This runs all 9 steps:
-1. Load XLS data into SQLite
-2. Create Neo4j constraints + indexes
-3. Load FOCUS 1.0 ontology (31 columns, 14 classes, 3 derivation rules)
-4. Load Services (with ServiceCategory), Accounts, Resources, Locations
-5. Load 1000+ CostRecord nodes with all graph relationships
-6. Load Cost Allocation nodes
-7. Create AWS↔Azure service equivalence relationships
-8. Embed all Service nodes
-9. Embed all FOCUSColumn, Charge, Allocation, Resource nodes
+1. **Auto-discover** XLS files (searches `data/`, `db/`, project root — no manual placement needed)
+2. Load data into SQLite billing database
+3. Create Neo4j constraints + indexes
+4. Load FOCUS 1.0 ontology (31 columns, 14 classes, 3 derivation rules)
+5. Load Services, Accounts, Resources, Locations
+6. Load 1000+ CostRecord nodes with all relationships
+7. Load Cost Allocation nodes
+8. Create AWS↔Azure service equivalence relationships
+9. Embed all nodes (FOCUSColumn, Service, Charge, Allocation, Resource)
 
-### 6. Launch Streamlit UI
+### 7. Launch Streamlit UI
 
 ```bash
 streamlit run app.py
@@ -322,13 +329,21 @@ streamlit run app.py
 
 Visit http://localhost:8501
 
-### 7. Launch FastAPI (Optional)
+### 8. Launch FastAPI (Optional)
 
 ```bash
 uvicorn api:app --reload
 ```
 
 Visit http://127.0.0.1:8000/docs for interactive API docs.
+
+### Already Cloned? Pulling Latest Fixes
+
+```bash
+git pull origin main
+python setup_demo_db.py
+streamlit run app.py
+```
 
 ---
 
