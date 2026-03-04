@@ -2,9 +2,16 @@
 # Embeds all node types with rich text representations
 
 from graph.neo4j_connection import driver
-from sentence_transformers import SentenceTransformer
 
-model = SentenceTransformer("all-MiniLM-L6-v2")
+_model = None
+
+def get_model():
+    global _model
+    if _model is None:
+        from sentence_transformers import SentenceTransformer
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
+
 
 
 def embed_nodes(label, text_fields):
@@ -36,7 +43,7 @@ def embed_nodes(label, text_fields):
                 continue
 
             text      = " | ".join(text_parts)
-            embedding = model.encode(text).tolist()
+            embedding = get_model().encode(text).tolist()
 
             session.run("""
                 MATCH (n)
