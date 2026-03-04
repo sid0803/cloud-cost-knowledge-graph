@@ -1,7 +1,12 @@
 #retrieval/hybrid_engine.py
 
+import os
 import sqlite3
 from graph.neo4j_connection import driver
+
+# Project root = two levels up from this file (retrieval/ → root)
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_BILLING_DB = os.path.join(_ROOT, "billing.db")
 
 _model = None
 
@@ -48,7 +53,7 @@ def get_resources_for_service(service_name):
 # Calculate Cost from SQLite
 # -------------------------------------------------
 def calculate_cost_for_resources(resource_ids):
-    conn = sqlite3.connect("billing.db")
+    conn = sqlite3.connect(_BILLING_DB)
     cursor = conn.cursor()
 
     total_cost = 0
