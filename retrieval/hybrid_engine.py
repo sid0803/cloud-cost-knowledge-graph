@@ -21,16 +21,18 @@ def get_model():
 # -------------------------------------------------
 # Get Equivalent Services (WITH PROVIDER)
 # -------------------------------------------------
-def get_service_and_equivalents(service_name):
+def get_service_and_equivalents(service_name, provider=None):
     with driver.session() as session:
         result = session.run("""
-            MATCH (s:Service {name:$service})
+            MATCH (s:Service)
+            WHERE s.name = $service
+              AND ($provider IS NULL OR s.cloudProvider = $provider)
             OPTIONAL MATCH (s)-[:EQUIVALENT_TO]-(eq:Service)
             RETURN collect(DISTINCT {
                 name: eq.name,
                 provider: eq.cloudProvider
             }) AS equivalents
-        """, service=service_name)
+        """, service=service_name, provider=provider)
 
         record = result.single()
         return record["equivalents"] if record else []
@@ -39,12 +41,14 @@ def get_service_and_equivalents(service_name):
 # -------------------------------------------------
 # Get Resources for a Service
 # -------------------------------------------------
-def get_resources_for_service(service_name):
+def get_resources_for_service(service_name, provider=None):
     with driver.session() as session:
         result = session.run("""
-            MATCH (r:Resource)-[:BELONGS_TO]->(s:Service {name:$service})
+            MATCH (r:Resource)-[:BELONGS_TO]->(s:Service)
+            WHERE s.name = $service
+              AND ($provider IS NULL OR s.cloudProvider = $provider)
             RETURN r.id AS resource_id
-        """, service=service_name)
+        """, service=service_name, provider=provider)
 
         return [r["resource_id"] for r in result]
 
@@ -145,10 +149,10 @@ def hybrid_query(user_query, top_k=5):
     primary_provider = boosted_scores[0]["provider"]
 
     # 2️⃣ Get Equivalent Services
-    equivalents = get_service_and_equivalents(primary_service)
+    equivalents = get_service_and_equivalents(primary_service, primary_provider)
 
     # 3️⃣ Cost for Primary Service
-    primary_resources = get_resources_for_service(primary_service)
+    primary_resources = get_resources_for_service(primary_service, primary_provider)
     primary_cost = calculate_cost_for_resources(primary_resources)
 
     # 4️⃣ Cost for Equivalent Services
@@ -158,7 +162,7 @@ def hybrid_query(user_query, top_k=5):
         eq_name = eq["name"]
         eq_provider = eq["provider"]
 
-        eq_resources = get_resources_for_service(eq_name)
+        eq_resources = get_resources_for_service(eq_name, eq_provider)
         eq_cost = calculate_cost_for_resources(eq_resources)
 
         equivalent_costs[eq_name] = {

@@ -3,6 +3,7 @@
 import streamlit as st
 import json
 import os
+import re
 from datetime import datetime
 
 # ── Page config ──────────────────────────────────────────────────────────────
@@ -155,7 +156,50 @@ except Exception as e:
 # ── Session state ─────────────────────────────────────────────────────────────
 if "result"       not in st.session_state: st.session_state.result       = None
 if "query_input"  not in st.session_state: st.session_state.query_input  = ""
+if "query_field"  not in st.session_state: st.session_state.query_field  = st.session_state.query_input
 if "history"      not in st.session_state: st.session_state.history      = []
+
+
+def _parse_provider_summary(answer_text: str):
+    pattern = re.compile(
+        r"\*\*(?P<provider>[A-Za-z0-9_ -]+)\s+Storage:\*\*\s*"
+        r"-\s*Total Cost:\s*\$(?P<total>[0-9,]+(?:\.[0-9]+)?)\s*"
+        r"-\s*Records:\s*(?P<records>[0-9,]+)\s*"
+        r"-\s*Services:\s*(?P<services>[^\n]+)",
+        re.IGNORECASE,
+    )
+    summaries = []
+    for m in pattern.finditer(answer_text):
+        summaries.append({
+            "provider": m.group("provider").strip(),
+            "total": m.group("total").strip(),
+            "records": m.group("records").strip(),
+            "services": m.group("services").strip(),
+        })
+    return summaries
+
+
+def _parse_service_breakdown_rows(answer_text: str):
+    if "Service Breakdown" not in answer_text:
+        return []
+
+    part = answer_text.split("Service Breakdown", 1)[1]
+    rows = []
+    for line in part.splitlines():
+        line = line.strip()
+        if not (line.startswith("|") and line.endswith("|")):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 5:
+            continue
+        rows.append({
+            "Provider": cells[0],
+            "Service": cells[1],
+            "Records": cells[2],
+            "Total Cost": cells[3],
+            "Avg Cost": cells[4],
+        })
+    return rows
 
 # ── Hero Header ───────────────────────────────────────────────────────────────
 st.markdown("""
@@ -217,6 +261,7 @@ with st.sidebar:
 
     for emoji, q in PRESET_QUERIES:
         if st.button(f"{emoji} {q[:55]}...", key=f"preset_{q[:20]}", use_container_width=True):
+            st.session_state.query_field = q
             st.session_state.query_input = q
             st.rerun()
 
@@ -227,7 +272,7 @@ with st.sidebar:
     <b>Stack:</b><br>
     • 🗄 Neo4j Knowledge Graph<br>
     • 🔍 all-MiniLM-L6-v2 Embeddings<br>
-    • 🤖 Gemini 1.5 Flash / OpenAI<br>
+    • 🤖 Gemini 2.x / OpenAI / Ollama<br>
     • 📊 FOCUS 1.0 Ontology<br>
     • ⚡ Hybrid RAG Pipeline
     </div>
@@ -254,7 +299,6 @@ col_input, col_btn = st.columns([5, 1])
 with col_input:
     query = st.text_input(
         "🔎 Ask a cloud cost question",
-        value=st.session_state.query_input,
         placeholder="e.g. Which FOCUS columns differ from vendor columns? | Compare AWS vs Azure storage costs",
         key="query_field",
         label_visibility="collapsed",
@@ -304,7 +348,36 @@ if st.session_state.result:
     # TAB 1 — ANSWER
     with tab1:
         answer = result.get("answer", "No answer generated.")
-        st.markdown(f'<div class="answer-box">{answer}</div>', unsafe_allow_html=True)
+        summary_rows = _parse_provider_summary(answer)
+        breakdown_rows = _parse_service_breakdown_rows(answer)
+
+        if breakdown_rows:
+            intro = answer.split("### Service Breakdown", 1)[0].strip()
+            if intro:
+                st.markdown(f'<div class="answer-box">{intro}</div>', unsafe_allow_html=True)
+
+            if summary_rows:
+                st.markdown("#### Provider Summary")
+                cols = st.columns(len(summary_rows))
+                for col, row in zip(cols, summary_rows):
+                    with col:
+                        st.markdown(
+                            f"""
+                            <div class="metric-card" style="text-align:left; min-height:130px;">
+                                <div style="color:white; font-weight:700; font-size:1rem;">{row['provider']}</div>
+                                <div style="color:rgba(255,255,255,0.85); margin-top:8px;">
+                                    <b>Total:</b> ${row['total']}<br>
+                                    <b>Records:</b> {row['records']}
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+
+            st.markdown("#### Service Breakdown")
+            st.dataframe(breakdown_rows, use_container_width=True, hide_index=True)
+        else:
+            st.markdown(f'<div class="answer-box">{answer}</div>', unsafe_allow_html=True)
 
         alloc = result.get("allocation_explanation")
         if alloc:
@@ -498,7 +571,7 @@ if not st.session_state.result:
             <div style="font-size:1.8rem;">🗺️</div>
             <div style="color:white; font-weight:600; margin:8px 0 4px;">FOCUS 1.0 Ontology</div>
             <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;">
-            30+ standardized columns modeled as graph nodes with derivation rules, validation rules, and vendor mappings.
+            Models 31 FOCUS columns and ontology classes as first-class graph entities, including derivation rules, validation constraints, and AWS/Azure normalization mappings.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -508,7 +581,7 @@ if not st.session_state.result:
             <div style="font-size:1.8rem;">⚡</div>
             <div style="color:white; font-weight:600; margin:8px 0 4px;">Hybrid Retrieval</div>
             <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;">
-            Vector similarity search on sentence-transformer embeddings + multi-hop Cypher graph traversal for provenance.
+            Combines semantic vector search with multi-hop Cypher traversal to return grounded answers with explicit provenance paths from source graph nodes.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -518,7 +591,7 @@ if not st.session_state.result:
             <div style="font-size:1.8rem;">🤖</div>
             <div style="color:white; font-weight:600; margin:8px 0 4px;">LLM Chain</div>
             <div style="color:rgba(255,255,255,0.6);font-size:0.82rem;">
-            Gemini 1.5 Flash → OpenAI GPT-4o-mini → Ollama fallback chain. All financial math is deterministic graph queries.
+            Multi-model fallback chain for robust natural-language generation, while all financial calculations remain deterministic and executed directly in Neo4j.
             </div>
         </div>
         """, unsafe_allow_html=True)

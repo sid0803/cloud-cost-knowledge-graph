@@ -30,8 +30,8 @@ def create_equivalence_relationships():
 
         for aws_service, azure_service in SERVICE_EQUIVALENCE:
             session.run("""
-                MATCH (s1:Service {name:$aws})
-                MATCH (s2:Service {name:$azure})
+                MATCH (s1:Service {name:$aws, cloudProvider:"AWS"})
+                MATCH (s2:Service {name:$azure, cloudProvider:"Azure"})
                 MERGE (s1)-[:EQUIVALENT_TO]->(s2)
                 MERGE (s2)-[:EQUIVALENT_TO]->(s1)
             """, aws=aws_service, azure=azure_service)

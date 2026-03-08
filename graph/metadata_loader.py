@@ -60,6 +60,11 @@ def infer_service_category(service_name: str) -> str:
     return "Other"
 
 
+def make_service_id(provider: str, service_name: str) -> str:
+    normalized = " ".join(str(service_name).strip().lower().split())
+    return f"{provider}:{normalized}"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # LOAD SERVICES
 # ─────────────────────────────────────────────────────────────────────────────
@@ -82,21 +87,25 @@ def load_services():
             if not name:
                 continue
             cat = category if category else infer_service_category(name)
+            service_id = make_service_id("AWS", name)
             session.run("""
-                MERGE (s:Service {name: $name})
-                SET s.cloudProvider   = "AWS",
+                MERGE (s:Service {serviceId: $serviceId})
+                SET s.name            = $name,
+                    s.cloudProvider   = "AWS",
                     s.serviceCategory = $category
-            """, name=name, category=cat)
+            """, serviceId=service_id, name=name, category=cat)
 
         for (name, category) in azure_services:
             if not name:
                 continue
             cat = category if category else infer_service_category(name)
+            service_id = make_service_id("Azure", name)
             session.run("""
-                MERGE (s:Service {name: $name})
-                SET s.cloudProvider   = "Azure",
+                MERGE (s:Service {serviceId: $serviceId})
+                SET s.name            = $name,
+                    s.cloudProvider   = "Azure",
                     s.serviceCategory = $category
-            """, name=name, category=cat)
+            """, serviceId=service_id, name=name, category=cat)
 
     print("✅ Services loaded with ServiceCategory")
 
@@ -208,11 +217,12 @@ def load_resources():
             """, id=str(res_id), name=res_name, type=res_type)
 
             if service_name:
+                service_id = make_service_id("AWS", service_name)
                 session.run("""
                     MATCH (r:Resource {id: $id})
-                    MATCH (s:Service  {name: $service})
+                    MATCH (s:Service  {serviceId: $serviceId})
                     MERGE (r)-[:BELONGS_TO]->(s)
-                """, id=str(res_id), service=service_name)
+                """, id=str(res_id), serviceId=service_id)
 
         for (res_id, service_name, res_name, res_type) in azure_rows:
             if not res_id:
@@ -225,11 +235,12 @@ def load_resources():
             """, id=str(res_id), name=res_name, type=res_type)
 
             if service_name:
+                service_id = make_service_id("Azure", service_name)
                 session.run("""
                     MATCH (r:Resource {id: $id})
-                    MATCH (s:Service  {name: $service})
+                    MATCH (s:Service  {serviceId: $serviceId})
                     MERGE (r)-[:BELONGS_TO]->(s)
-                """, id=str(res_id), service=service_name)
+                """, id=str(res_id), serviceId=service_id)
 
     print("✅ Resources loaded with ResourceName + ResourceType")
 

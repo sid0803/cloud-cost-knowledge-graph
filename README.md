@@ -478,3 +478,36 @@ cloud-cost-knowledge-graph/
 | RAG Pipeline | 20% | 11 structured queries + unlimited general queries via Gemini, multi-hop traversal, provenance paths |
 | Testing (11 queries) | 15% | All 11 assignment queries have dedicated handlers + automated evaluation via `run_evaluations.py` |
 | Bonus (API + UI) | 20% | FastAPI 4 endpoints + premium Streamlit with pyvis graph visualization + query history |
+
+---
+
+## Engineering Quality (New)
+
+- **Idempotent graph loading:** `CostRecord` IDs are now deterministic per source row, so rerunning setup no longer duplicates rows.
+- **Provider-safe service modeling:** `Service` nodes are uniquely keyed by `serviceId` (`<provider>:<normalized-name>`), preventing AWS/Azure overwrite collisions.
+- **Automated tests:** Added `pytest` test suite for intent/billing-period parsing and identity helper correctness.
+- **CI pipeline:** GitHub Actions now runs compile checks and tests on every push/PR.
+
+### Run Tests
+
+```bash
+pytest -q
+```
+
+---
+
+## Docker Quickstart (New)
+
+You can run the full stack (Neo4j + FastAPI + Streamlit) using Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- Streamlit UI: `http://localhost:8501`
+- FastAPI docs: `http://localhost:8000/docs`
+- Neo4j Browser: `http://localhost:7474`
+
+> Use your `.env` values for `NEO4J_PASSWORD` and API keys before starting Docker.

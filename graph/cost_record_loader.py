@@ -3,7 +3,7 @@
 
 import sqlite3
 from graph.neo4j_connection import driver
-import uuid
+import hashlib
 
 
 def parse_tags(tag_string):
@@ -30,8 +30,19 @@ def safe_float(val):
         return 0.0
 
 
+def make_service_id(provider: str, service_name: str) -> str:
+    normalized = " ".join(str(service_name).strip().lower().split())
+    return f"{provider}:{normalized}"
+
+
+def make_cost_record_id(provider: str, source_row_id, start, end, resource_id, service_name) -> str:
+    raw = f"{provider}|{source_row_id}|{start}|{end}|{resource_id}|{service_name}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
 def create_cost_record(session, row, provider):
     (
+        source_row_id,
         resource_id, resource_name, resource_type,
         service_name, account_id, sub_account_id,
         charge_category, charge_frequency, charge_description, charge_class,
@@ -43,7 +54,7 @@ def create_cost_record(session, row, provider):
         tags
     ) = row
 
-    cost_id = str(uuid.uuid4())
+    cost_id = make_cost_record_id(provider, source_row_id, start, end, resource_id, service_name)
 
     billed_cost    = safe_float(billed_cost)
     effective_cost = safe_float(effective_cost)
@@ -87,11 +98,12 @@ def create_cost_record(session, row, provider):
 
     # ── Service ──────────────────────────────────────────────────────────────
     if service_name:
+        service_id = make_service_id(provider, service_name)
         session.run("""
             MATCH (c:CostRecord {id: $cid})
-            MATCH (s:Service    {name: $service})
+            MATCH (s:Service    {serviceId: $serviceId})
             MERGE (c)-[:USES_SERVICE]->(s)
-        """, cid=cost_id, service=service_name)
+        """, cid=cost_id, serviceId=service_id)
 
     # ── Account ──────────────────────────────────────────────────────────────
     if account_id:
@@ -197,7 +209,7 @@ def load_cost_records(limit=None):
     cur = _get_col(cursor, "aws_billing", "BillingCurrency")
 
     aws_rows = cursor.execute(f"""
-        SELECT ResourceId, {rn}, {rt},
+        SELECT rowid, ResourceId, {rn}, {rt},
                ServiceName, BillingAccountId, {sub},
                ChargeCategory, ChargeFrequency, ChargeDescription, ChargeClass,
                ChargePeriodStart, ChargePeriodEnd,
@@ -217,7 +229,7 @@ def load_cost_records(limit=None):
     cur2 = _get_col(cursor, "azure_billing", "BillingCurrency")
 
     azure_rows = cursor.execute(f"""
-        SELECT resourceid, {rn2}, {rt2},
+        SELECT rowid, resourceid, {rn2}, {rt2},
                servicename, billingaccountid, {sub2},
                chargecategory, chargefrequency, chargedescription, chargeclass,
                chargeperiodstart, chargeperiodend,

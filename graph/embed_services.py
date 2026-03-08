@@ -17,9 +17,10 @@ def embed_services():
     embedded = 0
 
     with driver.session() as session:
-        result = session.run("MATCH (s:Service) RETURN s.name AS name")
+        result = session.run("MATCH (s:Service) RETURN s.serviceId AS serviceId, s.name AS name")
 
         for record in result:
+            service_id = record["serviceId"]
             name = record["name"]
 
             # Skip None / empty names — prevents TypeError: NoneType is not subscriptable
@@ -30,9 +31,9 @@ def embed_services():
             embedding = get_model().encode(str(name)).tolist()
 
             session.run("""
-                MATCH (s:Service {name: $name})
+                MATCH (s:Service {serviceId: $serviceId})
                 SET s.embedding = $embedding
-            """, name=name, embedding=embedding)
+            """, serviceId=service_id, embedding=embedding)
             embedded += 1
 
     if skipped:

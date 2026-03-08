@@ -59,10 +59,12 @@ def multi_index_search(query, top_k=3):
 # ─────────────────────────────────────────────────────────────────────────────
 # GRAPH CONTEXT EXPANSION (multi-hop traversal)
 # ─────────────────────────────────────────────────────────────────────────────
-def expand_service_context(service_name):
+def expand_service_context(service_name, provider=None):
     with driver.session() as session:
         result = session.run("""
-            MATCH (s:Service {name: $service})
+            MATCH (s:Service)
+            WHERE s.name = $service
+              AND ($provider IS NULL OR s.cloudProvider = $provider)
             OPTIONAL MATCH (s)<-[:USES_SERVICE]-(c:CostRecord)
             OPTIONAL MATCH (c)-[:HAS_CHARGE]->(ch:Charge)
             OPTIONAL MATCH (s)-[:EQUIVALENT_TO]-(eq:Service)
@@ -74,7 +76,7 @@ def expand_service_context(service_name):
                 sum(c.effectiveCost) AS total_cost,
                 collect(DISTINCT ch.category) AS charge_types,
                 collect(DISTINCT eq.name) AS equivalents
-        """, service=service_name)
+        """, service=service_name, provider=provider)
         return result.single()
 
 
@@ -283,7 +285,7 @@ def build_context(query: str) -> dict:
         if "Service" in labels:
             sname = node.get("name")
             if sname:
-                exp = expand_service_context(sname)
+                exp = expand_service_context(sname, node.get("cloudProvider"))
                 if exp:
                     total = exp.get("total_cost") or 0
                     count = exp.get("record_count") or 0

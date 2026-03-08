@@ -120,6 +120,8 @@ def get_concept(name: str):
                 count(DISTINCT c) AS records,
                 sum(c.effectiveCost) AS totalCost,
                 collect(DISTINCT eq.name) AS equivalents
+            ORDER BY records DESC
+            LIMIT 1
         """, name=name).single()
 
         if svc:
